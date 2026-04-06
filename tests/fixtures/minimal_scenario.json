@@ -1,0 +1,6 @@
+{
+  "scenario_id": "test.goal_to_exit",
+  "layout_id": "test.minimal_layout",
+  "start": [1.0, 9.0],
+  "goal": [9.5, 0.5]
+}
