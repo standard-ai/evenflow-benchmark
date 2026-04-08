@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .models import (
+    EvalResult,
     Exit,
     Layout,
     Obstacle,
@@ -23,6 +24,10 @@ from .validation import validate_layout
 
 def _read_json(path: str | Path) -> dict[str, Any]:
     return json.loads(Path(path).read_text())
+
+
+def _write_json(path: str | Path, data: dict[str, Any]) -> None:
+    Path(path).write_text(json.dumps(data, indent=2))
 
 
 def load_layout(path: str | Path, *, validate: bool = True) -> Layout:
@@ -179,3 +184,42 @@ def load_plan(path: str | Path, *, validate: bool = True) -> PlanResult:
         validate_plan_result(plan)
 
     return plan
+
+
+def load_eval(path: str | Path, *, validate: bool = False) -> EvalResult:
+    data = _read_json(path)
+
+    result = EvalResult(
+        success=bool(data["success"]),
+        path_length_m=(
+            float(data["path_length_m"])
+            if data.get("path_length_m") is not None
+            else None
+        ),
+        runtime_s=(
+            float(data["runtime_s"])
+            if data.get("runtime_s") is not None
+            else None
+        ),
+        num_waypoints=int(data["num_waypoints"]),
+        message=data.get("message", ""),
+        metadata=data.get("metadata", {}),
+    )
+
+    if validate:
+        from .validation import validate_eval_result
+        validate_eval_result(result)
+
+    return result
+
+
+def save_eval(path: str | Path, result: EvalResult) -> None:
+    data = {
+        "success": result.success,
+        "path_length_m": result.path_length_m,
+        "runtime_s": result.runtime_s,
+        "num_waypoints": result.num_waypoints,
+        "message": result.message,
+        "metadata": result.metadata,
+    }
+    _write_json(path, data)

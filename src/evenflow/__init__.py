@@ -1,5 +1,7 @@
-from .io import load_layout, load_plan, load_robot, load_scene, load_task
+from .evaluation import evaluate_plan
+from .io import load_eval, load_layout, load_plan, load_robot, load_scene, load_task, save_eval
 from .models import (
+    EvalResult,
     Exit,
     Layout,
     Obstacle,
@@ -27,6 +29,7 @@ from .render import (
 
 __all__ = [
     "BasePlanner",
+    "EvalResult",
     "Exit",
     "GeometryPlanner",
     "Layout",
@@ -40,11 +43,14 @@ __all__ = [
     "SceneWindow",
     "Task",
     "TaskRobot",
+    "evaluate_plan",
+    "load_eval",
     "load_layout",
     "load_plan",
     "load_robot",
     "load_scene",
     "load_task",
+    "save_eval",
     "draw_plan",
     "draw_task",
     "render_layout",

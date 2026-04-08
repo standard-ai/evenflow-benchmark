@@ -126,3 +126,13 @@ class PlanResult:
     runtime_s: Optional[float] = None
     message: str = ""
     metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class EvalResult:
+    success: bool
+    path_length_m: float | None
+    runtime_s: float | None
+    num_waypoints: int
+    message: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)

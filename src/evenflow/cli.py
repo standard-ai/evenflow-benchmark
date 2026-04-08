@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 
+from .evaluation import evaluate_plan
 from .io import load_layout, load_plan, load_robot, load_scene, load_task
 from .render import (
     save_layout_figure,
@@ -155,6 +156,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Validate a plan JSON file",
     )
     validate_plan_parser.add_argument("plan_json")
+
+    evaluate_plan_parser = subparsers.add_parser(
+        "evaluate-plan",
+        help="Evaluate a plan against a layout / scene / task / robot bundle",
+    )
+    evaluate_plan_parser.add_argument("layout_json")
+    evaluate_plan_parser.add_argument("scene_json")
+    evaluate_plan_parser.add_argument("task_json")
+    evaluate_plan_parser.add_argument("robot_json")
+    evaluate_plan_parser.add_argument("plan_json")
 
     return parser
 
@@ -325,6 +336,26 @@ def cmd_validate_plan(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_evaluate_plan(args: argparse.Namespace) -> int:
+    layout = load_layout(args.layout_json)
+    scene = load_scene(args.scene_json)
+    task = load_task(args.task_json)
+    robot = load_robot(args.robot_json)
+    plan = load_plan(args.plan_json)
+
+    result = evaluate_plan(layout, scene, task, robot, plan)
+
+    print("Evaluation OK")
+    print(f"  success: {result.success}")
+    print(f"  path_length_m: {result.path_length_m}")
+    print(f"  runtime_s: {result.runtime_s}")
+    print(f"  num_waypoints: {result.num_waypoints}")
+    if result.message:
+        print(f"  message: {result.message}")
+
+    return 0
+
+
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
@@ -351,6 +382,8 @@ def main() -> int:
         return cmd_validate_robot(args)
     if args.command == "validate-plan":
         return cmd_validate_plan(args)
+    if args.command == "evaluate-plan":
+        return cmd_evaluate_plan(args)
 
     parser.error(f"Unknown command: {args.command}")
     return 2
