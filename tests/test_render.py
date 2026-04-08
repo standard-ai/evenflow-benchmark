@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from evenflow.io import load_layout
-from evenflow.render import render_layout, save_layout_figure
+from evenflow.io import load_layout, load_plan
+from evenflow.render import render_layout, save_layout_figure, save_plan_figure
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -23,6 +23,17 @@ def test_save_layout_figure_writes_png(tmp_path: Path) -> None:
     out_path = tmp_path / "layout.png"
 
     save_layout_figure(layout, out_path)
+
+    assert out_path.exists()
+    assert out_path.stat().st_size > 0
+
+
+def test_save_plan_figure_writes_png(tmp_path: Path) -> None:
+    layout = load_layout(FIXTURES / "minimal_layout.json")
+    plan = load_plan(FIXTURES / "minimal_plan.json")
+    out_path = tmp_path / "plan.png"
+
+    save_plan_figure(layout, plan, out_path)
 
     assert out_path.exists()
     assert out_path.stat().st_size > 0

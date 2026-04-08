@@ -8,6 +8,8 @@ from .models import (
     Exit,
     Layout,
     Obstacle,
+    PlanResult,
+    PlanWaypoint,
     Robot,
     Scene,
     SceneFlow,
@@ -142,3 +144,38 @@ def load_robot(path: str | Path, *, validate: bool = True) -> Robot:
         validate_robot(robot)
 
     return robot
+
+
+def load_plan(path: str | Path, *, validate: bool = True) -> PlanResult:
+    data = _read_json(path)
+
+    plan = PlanResult(
+        planner_name=data["planner_name"],
+        success=bool(data["success"]),
+        waypoints=tuple(
+            PlanWaypoint(
+                x=float(wp["x"]),
+                y=float(wp["y"]),
+                t=float(wp["t"]) if wp.get("t") is not None else None,
+            )
+            for wp in data.get("waypoints", [])
+        ),
+        path_length_m=(
+            float(data["path_length_m"])
+            if data.get("path_length_m") is not None
+            else None
+        ),
+        runtime_s=(
+            float(data["runtime_s"])
+            if data.get("runtime_s") is not None
+            else None
+        ),
+        message=data.get("message", ""),
+        metadata=data.get("metadata", {}),
+    )
+
+    if validate:
+        from .validation import validate_plan_result
+        validate_plan_result(plan)
+
+    return plan

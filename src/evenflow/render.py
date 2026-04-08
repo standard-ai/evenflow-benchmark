@@ -10,7 +10,7 @@ from matplotlib.figure import Figure
 from matplotlib.patches import Polygon as MplPolygon
 
 from .geometry import bounds, centroid
-from .models import Layout, Scene, Task
+from .models import Layout, PlanResult, Scene, Task
 
 
 def render_layout(
@@ -217,6 +217,54 @@ def draw_task(
         ax.text(gx, gy, "goal", fontsize=8, ha="left", va="bottom")
 
 
+def draw_plan(
+    ax: Axes,
+    plan: PlanResult,
+    *,
+    annotate: bool = False,
+    show_waypoints: bool = False,
+    linewidth: float = 2.5,
+    alpha: float = 0.9,
+) -> None:
+    """
+    Draw a planner output on an existing axes.
+
+    If the plan is unsuccessful or has no waypoints, nothing is drawn.
+    """
+    if not plan.success or not plan.waypoints:
+        return
+
+    xs = [wp.x for wp in plan.waypoints]
+    ys = [wp.y for wp in plan.waypoints]
+
+    ax.plot(
+        xs,
+        ys,
+        linewidth=linewidth,
+        alpha=alpha,
+        zorder=6,
+        label=f"plan:{plan.planner_name}",
+    )
+
+    if show_waypoints:
+        ax.plot(
+            xs,
+            ys,
+            marker=".",
+            linestyle="None",
+            markersize=6,
+            alpha=alpha,
+            zorder=7,
+            label="plan-waypoints",
+        )
+
+    if annotate and plan.waypoints:
+        start = plan.waypoints[0]
+        end = plan.waypoints[-1]
+        ax.text(start.x, start.y, f"{plan.planner_name}:start", fontsize=8, ha="left", va="bottom")
+        ax.text(end.x, end.y, f"{plan.planner_name}:end", fontsize=8, ha="left", va="bottom")
+
+
 def save_layout_figure(layout: Layout, out_path: str | Path, **kwargs) -> None:
     fig, _ = render_layout(layout, **kwargs)
     fig.tight_layout()
@@ -358,6 +406,105 @@ def save_scene_task_figure(
         task,
         annotate=annotate_task,
         show_straight_line=show_straight_line,
+    )
+
+    _legend_outside(ax)
+    fig.tight_layout()
+    fig.savefig(Path(out_path), dpi=200, bbox_inches="tight")
+    plt.close(fig)
+
+
+def save_plan_figure(
+    layout: Layout,
+    plan: PlanResult,
+    out_path: str | Path,
+    *,
+    show_obstacle_labels: bool = True,
+    show_exit_labels: bool = True,
+    annotate_plan: bool = True,
+    show_waypoints: bool = False,
+    title: str | None = None,
+) -> None:
+    fig, ax = render_layout(
+        layout,
+        show_obstacle_labels=show_obstacle_labels,
+        show_exit_labels=show_exit_labels,
+        title=title or f"Plan: {plan.planner_name}",
+    )
+    draw_plan(
+        ax,
+        plan,
+        annotate=annotate_plan,
+        show_waypoints=show_waypoints,
+    )
+    _legend_outside(ax)
+    fig.tight_layout()
+    fig.savefig(Path(out_path), dpi=200, bbox_inches="tight")
+    plt.close(fig)
+
+
+def save_scene_task_plan_figure(
+    layout: Layout,
+    scene: Scene,
+    task: Task,
+    plan: PlanResult,
+    out_path: str | Path,
+    *,
+    scene_json_path: str | Path | None = None,
+    show_tracks: bool = False,
+    tracks_x_field: str = "bkg_x",
+    tracks_y_field: str = "bkg_y",
+    max_tracks: int | None = None,
+    show_obstacle_labels: bool = True,
+    show_exit_labels: bool = True,
+    annotate_scene: bool = True,
+    annotate_task: bool = True,
+    annotate_plan: bool = True,
+    show_p_star: bool = True,
+    show_u_hat: bool = True,
+    u_hat_scale: float = 1.0,
+    show_straight_line: bool = True,
+    show_waypoints: bool = False,
+    title: str | None = None,
+) -> None:
+    fig, ax = render_layout(
+        layout,
+        show_obstacle_labels=show_obstacle_labels,
+        show_exit_labels=show_exit_labels,
+        title=title or f"{scene.scene_id} | {task.task_id} | {plan.planner_name}",
+    )
+
+    if show_tracks:
+        if scene_json_path is None:
+            raise ValueError("scene_json_path is required when show_tracks=True")
+        draw_scene_tracks(
+            ax,
+            scene,
+            scene_json_path=scene_json_path,
+            x_field=tracks_x_field,
+            y_field=tracks_y_field,
+            max_tracks=max_tracks,
+        )
+
+    draw_scene(
+        ax,
+        scene,
+        annotate=annotate_scene,
+        show_p_star=show_p_star,
+        show_u_hat=show_u_hat,
+        u_hat_scale=u_hat_scale,
+    )
+    draw_task(
+        ax,
+        task,
+        annotate=annotate_task,
+        show_straight_line=show_straight_line,
+    )
+    draw_plan(
+        ax,
+        plan,
+        annotate=annotate_plan,
+        show_waypoints=show_waypoints,
     )
 
     _legend_outside(ax)

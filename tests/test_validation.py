@@ -7,6 +7,8 @@ import pytest
 from evenflow.io import load_layout
 from evenflow.models import (
     Layout,
+    PlanResult,
+    PlanWaypoint,
     Robot,
     Scene,
     SceneFlow,
@@ -18,6 +20,7 @@ from evenflow.models import (
 from evenflow.validation import (
     ValidationError,
     validate_layout,
+    validate_plan_result,
     validate_robot,
     validate_scene,
     validate_task,
@@ -134,3 +137,34 @@ def test_validate_robot_requires_positive_radius() -> None:
 
     with pytest.raises(ValidationError, match="radius_m must be positive"):
         validate_robot(robot)
+
+
+def test_validate_plan_result_accepts_valid_plan() -> None:
+    plan = PlanResult(
+        planner_name="geometry",
+        success=True,
+        waypoints=(
+            PlanWaypoint(x=1.0, y=8.5),
+            PlanWaypoint(x=8.5, y=8.5),
+            PlanWaypoint(x=8.5, y=2.0),
+        ),
+        path_length_m=14.0,
+        runtime_s=0.01,
+        message="ok",
+    )
+
+    validate_plan_result(plan)
+
+
+def test_validate_plan_result_rejects_successful_empty_plan() -> None:
+    plan = PlanResult(
+        planner_name="geometry",
+        success=True,
+        waypoints=(),
+    )
+
+    with pytest.raises(
+        ValidationError,
+        match="successful plans must contain at least 2 waypoints",
+    ):
+        validate_plan_result(plan)

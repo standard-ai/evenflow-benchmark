@@ -1,0 +1,15 @@
+{
+  "planner_name": "geometry",
+  "success": true,
+  "waypoints": [
+    { "x": 1.0, "y": 8.5, "t": null },
+    { "x": 8.5, "y": 8.5, "t": null },
+    { "x": 8.5, "y": 2.0, "t": null }
+  ],
+  "path_length_m": 14.0,
+  "runtime_s": 0.002,
+  "message": "ok",
+  "metadata": {
+    "description": "Minimal example plan"
+  }
+}

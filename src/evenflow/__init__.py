@@ -1,5 +1,4 @@
-
-from .io import load_layout, load_robot, load_scene, load_task
+from .io import load_layout, load_plan, load_robot, load_scene, load_task
 from .models import (
     Exit,
     Layout,
@@ -17,9 +16,12 @@ from .models import (
 from .planner import BasePlanner
 from .planners import GeometryPlanner
 from .render import (
+    draw_plan,
     draw_task,
     render_layout,
     save_layout_figure,
+    save_plan_figure,
+    save_scene_task_plan_figure,
     save_task_figure,
 )
 
@@ -39,11 +41,15 @@ __all__ = [
     "Task",
     "TaskRobot",
     "load_layout",
+    "load_plan",
     "load_robot",
     "load_scene",
     "load_task",
+    "draw_plan",
     "draw_task",
     "render_layout",
     "save_layout_figure",
+    "save_plan_figure",
+    "save_scene_task_plan_figure",
     "save_task_figure",
 ]

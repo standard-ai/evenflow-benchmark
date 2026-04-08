@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .models import Layout, Polygon, Robot, Scene, Task
+from .models import Layout, PlanResult, PlanWaypoint, Polygon, Robot, Scene, Task
 
 
 class ValidationError(ValueError):
@@ -22,6 +22,15 @@ def _validate_point(name: str, point: tuple[float, float]) -> None:
         raise ValidationError(f"{name} must be a 2D point")
     if not all(isinstance(v, (int, float)) for v in point):
         raise ValidationError(f"{name} must contain numeric coordinates")
+
+
+def _validate_plan_waypoint(name: str, waypoint: PlanWaypoint) -> None:
+    if not isinstance(waypoint.x, (int, float)):
+        raise ValidationError(f"{name}.x must be numeric")
+    if not isinstance(waypoint.y, (int, float)):
+        raise ValidationError(f"{name}.y must be numeric")
+    if waypoint.t is not None and not isinstance(waypoint.t, (int, float)):
+        raise ValidationError(f"{name}.t must be numeric when provided")
 
 
 def validate_layout(layout: Layout) -> None:
@@ -105,3 +114,37 @@ def validate_robot(robot: Robot) -> None:
 
     if robot.max_speed_mps <= 0:
         raise ValidationError("max_speed_mps must be positive")
+
+
+def validate_plan_result(plan: PlanResult) -> None:
+    if not plan.planner_name:
+        raise ValidationError("planner_name is required")
+
+    if not isinstance(plan.success, bool):
+        raise ValidationError("success must be a bool")
+
+    if not isinstance(plan.waypoints, tuple):
+        raise ValidationError("waypoints must be a tuple")
+
+    if plan.success and len(plan.waypoints) < 2:
+        raise ValidationError("successful plans must contain at least 2 waypoints")
+
+    for i, waypoint in enumerate(plan.waypoints):
+        _validate_plan_waypoint(f"waypoints[{i}]", waypoint)
+
+    # If timestamps are provided, require monotone nondecreasing order.
+    ts = [wp.t for wp in plan.waypoints]
+    if any(t is not None for t in ts):
+        if not all(t is not None for t in ts):
+            raise ValidationError(
+                "waypoint timestamps must either all be provided or all be omitted"
+            )
+        for i in range(1, len(ts)):
+            if ts[i] < ts[i - 1]:
+                raise ValidationError("waypoint timestamps must be nondecreasing")
+
+    if plan.path_length_m is not None and plan.path_length_m < 0:
+        raise ValidationError("path_length_m must be nonnegative")
+
+    if plan.runtime_s is not None and plan.runtime_s < 0:
+        raise ValidationError("runtime_s must be nonnegative")

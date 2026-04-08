@@ -89,15 +89,36 @@ class Robot:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PlanWaypoint:
+    """
+    A single waypoint in a planner output.
+
+    Semantics:
+    - x, y are layout-frame coordinates in meters.
+    - t is optional and may be omitted by untimed planners.
+    - If provided, t should be interpreted consistently within a plan
+      (for example, seconds from plan start).
+    """
     x: float
     y: float
     t: Optional[float] = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PlanResult:
+    """
+    Canonical planner output.
+
+    Semantics:
+    - planner_name identifies the planner implementation.
+    - success=True means the planner produced a usable plan.
+    - success=False means planning failed; waypoints may be empty.
+    - waypoints is the returned path/trajectory representation.
+    - path_length_m and runtime_s are optional summary fields.
+    - message is a human-readable status/debug string.
+    - metadata may contain planner-specific diagnostics.
+    """
     planner_name: str
     success: bool
     waypoints: Tuple[PlanWaypoint, ...]

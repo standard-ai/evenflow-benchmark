@@ -2,19 +2,23 @@ from __future__ import annotations
 
 import argparse
 
-from .io import load_layout, load_scene, load_task, load_robot
+from .io import load_layout, load_plan, load_robot, load_scene, load_task
 from .render import (
     save_layout_figure,
+    save_plan_figure,
     save_scene_figure,
     save_scene_task_figure,
+    save_scene_task_plan_figure,
     save_task_figure,
 )
 from .validation import (
     validate_layout,
+    validate_plan_result,
+    validate_robot,
     validate_scene,
     validate_task,
-    validate_robot,
 )
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="evenflow")
@@ -84,6 +88,44 @@ def build_parser() -> argparse.ArgumentParser:
     render_scene_task_parser.add_argument("--max-tracks", type=int, default=None)
     render_scene_task_parser.add_argument("--title", default=None)
 
+    render_plan_parser = subparsers.add_parser(
+        "render-plan",
+        help="Render a plan on top of a layout",
+    )
+    render_plan_parser.add_argument("layout_json")
+    render_plan_parser.add_argument("plan_json")
+    render_plan_parser.add_argument("output_image")
+    render_plan_parser.add_argument("--no-obstacle-labels", action="store_true")
+    render_plan_parser.add_argument("--no-exit-labels", action="store_true")
+    render_plan_parser.add_argument("--no-plan-annotations", action="store_true")
+    render_plan_parser.add_argument("--show-waypoints", action="store_true")
+    render_plan_parser.add_argument("--title", default=None)
+
+    render_scene_task_plan_parser = subparsers.add_parser(
+        "render-scene-task-plan",
+        help="Render a scene, task, and plan together on top of a layout",
+    )
+    render_scene_task_plan_parser.add_argument("layout_json")
+    render_scene_task_plan_parser.add_argument("scene_json")
+    render_scene_task_plan_parser.add_argument("task_json")
+    render_scene_task_plan_parser.add_argument("plan_json")
+    render_scene_task_plan_parser.add_argument("output_image")
+    render_scene_task_plan_parser.add_argument("--no-obstacle-labels", action="store_true")
+    render_scene_task_plan_parser.add_argument("--no-exit-labels", action="store_true")
+    render_scene_task_plan_parser.add_argument("--no-scene-annotations", action="store_true")
+    render_scene_task_plan_parser.add_argument("--no-task-annotations", action="store_true")
+    render_scene_task_plan_parser.add_argument("--no-plan-annotations", action="store_true")
+    render_scene_task_plan_parser.add_argument("--no-p-star", action="store_true")
+    render_scene_task_plan_parser.add_argument("--no-u-hat", action="store_true")
+    render_scene_task_plan_parser.add_argument("--u-hat-scale", type=float, default=1.0)
+    render_scene_task_plan_parser.add_argument("--no-straight-line", action="store_true")
+    render_scene_task_plan_parser.add_argument("--show-tracks", action="store_true")
+    render_scene_task_plan_parser.add_argument("--show-waypoints", action="store_true")
+    render_scene_task_plan_parser.add_argument("--tracks-x-field", default="bkg_x")
+    render_scene_task_plan_parser.add_argument("--tracks-y-field", default="bkg_y")
+    render_scene_task_plan_parser.add_argument("--max-tracks", type=int, default=None)
+    render_scene_task_plan_parser.add_argument("--title", default=None)
+
     validate_layout_parser = subparsers.add_parser(
         "validate-layout",
         help="Validate a layout JSON file",
@@ -107,6 +149,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Validate a robot JSON file",
     )
     validate_robot_parser.add_argument("robot_json")
+
+    validate_plan_parser = subparsers.add_parser(
+        "validate-plan",
+        help="Validate a plan JSON file",
+    )
+    validate_plan_parser.add_argument("plan_json")
 
     return parser
 
@@ -193,6 +241,55 @@ def cmd_render_scene_task(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_render_plan(args: argparse.Namespace) -> int:
+    layout = load_layout(args.layout_json)
+    plan = load_plan(args.plan_json)
+    save_plan_figure(
+        layout,
+        plan,
+        args.output_image,
+        show_obstacle_labels=not args.no_obstacle_labels,
+        show_exit_labels=not args.no_exit_labels,
+        annotate_plan=not args.no_plan_annotations,
+        show_waypoints=args.show_waypoints,
+        title=args.title,
+    )
+    print(f"Wrote {args.output_image}")
+    return 0
+
+
+def cmd_render_scene_task_plan(args: argparse.Namespace) -> int:
+    layout = load_layout(args.layout_json)
+    scene = load_scene(args.scene_json)
+    task = load_task(args.task_json)
+    plan = load_plan(args.plan_json)
+    save_scene_task_plan_figure(
+        layout,
+        scene,
+        task,
+        plan,
+        args.output_image,
+        scene_json_path=args.scene_json,
+        show_tracks=args.show_tracks,
+        tracks_x_field=args.tracks_x_field,
+        tracks_y_field=args.tracks_y_field,
+        max_tracks=args.max_tracks,
+        show_obstacle_labels=not args.no_obstacle_labels,
+        show_exit_labels=not args.no_exit_labels,
+        annotate_scene=not args.no_scene_annotations,
+        annotate_task=not args.no_task_annotations,
+        annotate_plan=not args.no_plan_annotations,
+        show_p_star=not args.no_p_star,
+        show_u_hat=not args.no_u_hat,
+        u_hat_scale=args.u_hat_scale,
+        show_straight_line=not args.no_straight_line,
+        show_waypoints=args.show_waypoints,
+        title=args.title,
+    )
+    print(f"Wrote {args.output_image}")
+    return 0
+
+
 def cmd_validate_layout(args: argparse.Namespace) -> int:
     layout = load_layout(args.layout_json, validate=False)
     validate_layout(layout)
@@ -221,6 +318,13 @@ def cmd_validate_robot(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_validate_plan(args: argparse.Namespace) -> int:
+    plan = load_plan(args.plan_json, validate=False)
+    validate_plan_result(plan)
+    print(f"Plan OK: {plan.planner_name}")
+    return 0
+
+
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
@@ -233,6 +337,10 @@ def main() -> int:
         return cmd_render_task(args)
     if args.command == "render-scene-task":
         return cmd_render_scene_task(args)
+    if args.command == "render-plan":
+        return cmd_render_plan(args)
+    if args.command == "render-scene-task-plan":
+        return cmd_render_scene_task_plan(args)
     if args.command == "validate-layout":
         return cmd_validate_layout(args)
     if args.command == "validate-scene":
@@ -241,6 +349,8 @@ def main() -> int:
         return cmd_validate_task(args)
     if args.command == "validate-robot":
         return cmd_validate_robot(args)
+    if args.command == "validate-plan":
+        return cmd_validate_plan(args)
 
     parser.error(f"Unknown command: {args.command}")
     return 2
