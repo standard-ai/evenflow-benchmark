@@ -191,6 +191,98 @@ PlanResult
 
 ---
 
+
+# Planner Output Specification
+
+Planners must return a `PlanResult` object. This defines the standard output
+format used for rendering, validation, and evaluation.
+
+```python
+PlanResult(
+    planner_name: str
+    success: bool
+    waypoints: tuple[PlanWaypoint, ...]
+    path_length_m: float | None
+    runtime_s: float | None
+    message: str
+    metadata: dict
+)
+```
+
+Waypoints:
+
+```python
+PlanWaypoint(
+    x: float
+    y: float
+    t: float | None = None
+)
+```
+
+Notes:
+
+- `waypoints` must contain at least **start and goal** if `success=True`
+- timestamps are optional
+- if timestamps are provided, they must be **monotonic**
+- failed plans should return `success=False` and empty waypoints
+- `path_length_m` and `runtime_s` are optional but recommended
+
+
+## Planner Output Validation
+
+EvenFlow validates planner outputs to ensure consistency across benchmarks.
+
+Validation checks:
+
+- planner_name must be non-empty
+- successful plans must contain ≥ 2 waypoints
+- failed plans must contain 0 waypoints
+- waypoint coordinates must be finite
+- timestamps must be all-present or all-omitted
+- timestamps must be nondecreasing
+- runtime must be nonnegative
+- path_length must be nonnegative
+
+
+# Rendering Planner Outputs
+
+EvenFlow can render planner results:
+
+```
+evenflow render-plan     layout.json     plan.json     out.png
+```
+
+Or:
+
+```
+evenflow render-scene-task-plan     layout.json     scene.json     task.json     plan.json     out.png
+```
+
+This is useful for:
+
+- debugging planners
+- visual validation
+- benchmark submissions
+
+
+## Example Plan JSON
+
+```json
+{
+  "planner_name": "geometry",
+  "success": true,
+  "waypoints": [
+    { "x": 1.0, "y": 8.5, "t": null },
+    { "x": 8.5, "y": 8.5, "t": null },
+    { "x": 8.5, "y": 2.0, "t": null }
+  ],
+  "path_length_m": 14.0,
+  "runtime_s": 0.002,
+  "message": "ok"
+}
+```
+
+
 # Rendering
 
 EvenFlow includes built-in rendering for visual debugging.
