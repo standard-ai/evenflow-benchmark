@@ -31,9 +31,50 @@ class Layout:
 
 
 @dataclass(slots=True)
-class Scenario:
-    scenario_id: str
+class SceneWindow:
+    start: str
+    end: str
+    duration_s: float | None = None
+
+
+@dataclass(slots=True)
+class SceneTracking:
+    format: str
+    path: str
+    timestamp_field: str
+    track_id_field: str
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class SceneFlow:
+    p_star: Point | None = None
+    u_hat: Point | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class Scene:
+    scene_id: str
     layout_id: str
+    tracking: SceneTracking
+    window: SceneWindow
+    flow: SceneFlow | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+    provenance: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class TaskRobot:
     start: Point
     goal: Point
+
+
+@dataclass(slots=True)
+class Task:
+    task_id: str
+    scene_id: str
+    task_type: str
+    robot: TaskRobot
     metadata: dict[str, Any] = field(default_factory=dict)
+    provenance: dict[str, Any] = field(default_factory=dict)

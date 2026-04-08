@@ -1,0 +1,30 @@
+{
+  "schema_version": "0.1",
+  "task_id": "example.simple_10x10.cross_001",
+  "scene_id": "example.simple_10x10.scene_001",
+  "task_type": "cross_flow",
+  "robot": {
+    "start": [
+      1.0,
+      8.5
+    ],
+    "goal": [
+      8.5,
+      2.0
+    ]
+  },
+  "metadata": {
+    "description": "Toy cross-flow task over the simple_10x10 scene."
+  },
+  "provenance": {
+    "generator": {
+      "name": "manual_example",
+      "version": "0.1.0",
+      "git_commit": null
+    },
+    "generated_at": "2026-04-07T00:00:00Z",
+    "parameters": {
+      "notes": "Hand-authored example task for documentation."
+    }
+  }
+}

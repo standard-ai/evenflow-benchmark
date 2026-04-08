@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .models import Layout, Polygon
+from .models import Layout, Polygon, Scene, Task
 
 
 class ValidationError(ValueError):
@@ -17,6 +17,13 @@ def _validate_polygon(name: str, poly: Polygon) -> None:
             raise ValidationError(f"{name}[{i}] must contain numeric coordinates")
 
 
+def _validate_point(name: str, point: tuple[float, float]) -> None:
+    if len(point) != 2:
+        raise ValidationError(f"{name} must be a 2D point")
+    if not all(isinstance(v, (int, float)) for v in point):
+        raise ValidationError(f"{name} must contain numeric coordinates")
+
+
 def validate_layout(layout: Layout) -> None:
     if not layout.layout_id:
         raise ValidationError("layout_id is required")
@@ -29,3 +36,53 @@ def validate_layout(layout: Layout) -> None:
         if not ex.id:
             raise ValidationError("Each exit must have an id")
         _validate_polygon(f"exit:{ex.id}", ex.polygon)
+
+
+def validate_scene(scene: Scene) -> None:
+    if not scene.scene_id:
+        raise ValidationError("scene_id is required")
+
+    if not scene.layout_id:
+        raise ValidationError("layout_id is required")
+
+    if not scene.tracking.format:
+        raise ValidationError("scene.tracking.format is required")
+
+    if not scene.tracking.path:
+        raise ValidationError("scene.tracking.path is required")
+
+    if not scene.tracking.timestamp_field:
+        raise ValidationError("scene.tracking.timestamp_field is required")
+
+    if not scene.tracking.track_id_field:
+        raise ValidationError("scene.tracking.track_id_field is required")
+
+    if not scene.window.start:
+        raise ValidationError("scene.window.start is required")
+
+    if not scene.window.end:
+        raise ValidationError("scene.window.end is required")
+
+    if scene.window.duration_s is not None and scene.window.duration_s <= 0:
+        raise ValidationError("scene.window.duration_s must be positive")
+
+    if scene.flow:
+        if scene.flow.p_star:
+            _validate_point("scene.flow.p_star", scene.flow.p_star)
+
+        if scene.flow.u_hat:
+            _validate_point("scene.flow.u_hat", scene.flow.u_hat)
+
+
+def validate_task(task: Task) -> None:
+    if not task.task_id:
+        raise ValidationError("task_id is required")
+
+    if not task.scene_id:
+        raise ValidationError("scene_id is required")
+
+    if not task.task_type:
+        raise ValidationError("task_type is required")
+
+    _validate_point("task.robot.start", task.robot.start)
+    _validate_point("task.robot.goal", task.robot.goal)

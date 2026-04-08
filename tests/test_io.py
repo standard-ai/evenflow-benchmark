@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from evenflow.io import load_layout, load_scenario
+from evenflow.io import load_layout, load_scene, load_task
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -19,10 +19,18 @@ def test_load_layout_reads_basic_fields() -> None:
     assert layout.exits[0].id == "exit_1"
 
 
-def test_load_scenario_reads_basic_fields() -> None:
-    scenario = load_scenario(FIXTURES / "minimal_scenario.json")
+def test_load_scene_reads_basic_fields() -> None:
+    scene = load_scene(FIXTURES / "minimal_scene.json")
 
-    assert scenario.scenario_id == "test.goal_to_exit"
-    assert scenario.layout_id == "test.minimal_layout"
-    assert scenario.start == (1.0, 9.0)
-    assert scenario.goal == (9.5, 0.5)
+    assert scene.scene_id == "test.simple"
+    assert scene.layout_id == "test.simple_10x10"
+    assert scene.window.duration_s == 10.0
+    assert scene.flow.p_star == (5.0, 5.0)
+
+
+def test_load_task_reads_basic_fields() -> None:
+    task = load_task(FIXTURES / "minimal_task.json")
+
+    assert task.task_type == "cross_flow"
+    assert task.robot.start == (1.0, 8.5)
+    assert task.robot.goal == (8.5, 2.0)
