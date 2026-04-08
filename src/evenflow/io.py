@@ -8,6 +8,7 @@ from .models import (
     Exit,
     Layout,
     Obstacle,
+    Robot,
     Scene,
     SceneFlow,
     SceneTracking,
@@ -120,3 +121,24 @@ def load_task(path: str | Path, *, validate: bool = True) -> Task:
         validate_task(task)
 
     return task
+
+
+def load_robot(path: str | Path, *, validate: bool = True) -> Robot:
+    data = _read_json(path)
+
+    footprint = data.get("footprint", {})
+    dynamics = data.get("dynamics", {})
+
+    robot = Robot(
+        robot_id=data.get("robot_id", Path(path).stem),
+        kinematics=data["kinematics"],
+        radius_m=float(footprint["radius_m"]),
+        max_speed_mps=float(dynamics["max_speed_mps"]),
+        metadata=data.get("metadata", {}),
+    )
+
+    if validate:
+        from .validation import validate_robot
+        validate_robot(robot)
+
+    return robot

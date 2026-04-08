@@ -1,0 +1,15 @@
+{
+  "robot_id": "test.simple_disk",
+  "schema_version": "0.1",
+  "kinematics": "holonomic",
+  "footprint": {
+    "type": "disk",
+    "radius_m": 0.25
+  },
+  "dynamics": {
+    "max_speed_mps": 1.2
+  },
+  "metadata": {
+    "description": "Minimal test robot"
+  }
+}

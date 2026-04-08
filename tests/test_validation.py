@@ -7,8 +7,10 @@ import pytest
 from evenflow.io import load_layout
 from evenflow.models import (
     Layout,
+    Robot,
     Scene,
     SceneFlow,
+    SceneTracking,
     SceneWindow,
     Task,
     TaskRobot,
@@ -16,6 +18,7 @@ from evenflow.models import (
 from evenflow.validation import (
     ValidationError,
     validate_layout,
+    validate_robot,
     validate_scene,
     validate_task,
 )
@@ -47,7 +50,12 @@ def test_validate_scene_accepts_valid_scene() -> None:
     scene = Scene(
         scene_id="scene_1",
         layout_id="layout_1",
-        tracks_file="tracks/scene_1.json",
+        tracking=SceneTracking(
+            format="csv",
+            path="tracks/scene_1.csv",
+            timestamp_field="timestamp",
+            track_id_field="person_track_id",
+        ),
         window=SceneWindow(
             start="1971-01-01T00:00:00Z",
             end="1971-01-01T00:00:10Z",
@@ -62,18 +70,23 @@ def test_validate_scene_accepts_valid_scene() -> None:
     validate_scene(scene)
 
 
-def test_validate_scene_requires_tracks_file() -> None:
+def test_validate_scene_requires_tracking_path() -> None:
     scene = Scene(
         scene_id="scene_1",
         layout_id="layout_1",
-        tracks_file="",
+        tracking=SceneTracking(
+            format="csv",
+            path="",
+            timestamp_field="timestamp",
+            track_id_field="person_track_id",
+        ),
         window=SceneWindow(
             start="1971-01-01T00:00:00Z",
             end="1971-01-01T00:00:10Z",
         ),
     )
 
-    with pytest.raises(ValidationError, match="tracks_file is required"):
+    with pytest.raises(ValidationError, match="scene.tracking.path is required"):
         validate_scene(scene)
 
 
@@ -98,3 +111,26 @@ def test_validate_task_requires_scene_id() -> None:
 
     with pytest.raises(ValidationError, match="scene_id is required"):
         validate_task(task)
+
+
+def test_validate_robot_accepts_valid_robot() -> None:
+    robot = Robot(
+        robot_id="test.simple_disk",
+        kinematics="holonomic",
+        radius_m=0.25,
+        max_speed_mps=1.2,
+    )
+
+    validate_robot(robot)
+
+
+def test_validate_robot_requires_positive_radius() -> None:
+    robot = Robot(
+        robot_id="test.simple_disk",
+        kinematics="holonomic",
+        radius_m=0.0,
+        max_speed_mps=1.2,
+    )
+
+    with pytest.raises(ValidationError, match="radius_m must be positive"):
+        validate_robot(robot)

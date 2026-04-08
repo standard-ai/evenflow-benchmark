@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .models import Layout, Polygon, Scene, Task
+from .models import Layout, Polygon, Robot, Scene, Task
 
 
 class ValidationError(ValueError):
@@ -86,3 +86,22 @@ def validate_task(task: Task) -> None:
 
     _validate_point("task.robot.start", task.robot.start)
     _validate_point("task.robot.goal", task.robot.goal)
+
+
+def validate_robot(robot: Robot) -> None:
+    if not robot.robot_id:
+        raise ValidationError("robot_id is required")
+
+    if not robot.kinematics:
+        raise ValidationError("kinematics is required")
+
+    if robot.kinematics not in {"holonomic", "differential_drive", "ackermann"}:
+        raise ValidationError(
+            "kinematics must be one of: holonomic, differential_drive, ackermann"
+        )
+
+    if robot.radius_m <= 0:
+        raise ValidationError("radius_m must be positive")
+
+    if robot.max_speed_mps <= 0:
+        raise ValidationError("max_speed_mps must be positive")

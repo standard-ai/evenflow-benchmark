@@ -2,15 +2,19 @@ from __future__ import annotations
 
 import argparse
 
-from .io import load_layout, load_scene, load_task
+from .io import load_layout, load_scene, load_task, load_robot
 from .render import (
     save_layout_figure,
     save_scene_figure,
     save_scene_task_figure,
     save_task_figure,
 )
-from .validation import validate_layout, validate_scene, validate_task
-
+from .validation import (
+    validate_layout,
+    validate_scene,
+    validate_task,
+    validate_robot,
+)
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="evenflow")
@@ -97,6 +101,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Validate a task JSON file",
     )
     validate_task_parser.add_argument("task_json")
+
+    validate_robot_parser = subparsers.add_parser(
+        "validate-robot",
+        help="Validate a robot JSON file",
+    )
+    validate_robot_parser.add_argument("robot_json")
 
     return parser
 
@@ -204,6 +214,13 @@ def cmd_validate_task(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_validate_robot(args: argparse.Namespace) -> int:
+    robot = load_robot(args.robot_json, validate=False)
+    validate_robot(robot)
+    print(f"Robot OK: {robot.robot_id}")
+    return 0
+
+
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
@@ -222,6 +239,8 @@ def main() -> int:
         return cmd_validate_scene(args)
     if args.command == "validate-task":
         return cmd_validate_task(args)
+    if args.command == "validate-robot":
+        return cmd_validate_robot(args)
 
     parser.error(f"Unknown command: {args.command}")
     return 2

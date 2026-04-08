@@ -1,0 +1,13 @@
+{
+  "task_id": "test.cross_001",
+  "scene_id": "test.simple",
+  "task_type": "cross_flow",
+  "robot": {
+    "start": [1.0, 8.5],
+    "goal": [8.5, 2.0]
+  },
+  "metadata": {
+    "description": "Minimal test task"
+  },
+  "provenance": {}
+}

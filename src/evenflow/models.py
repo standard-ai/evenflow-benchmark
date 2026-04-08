@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Dict, Optional, Tuple
 
 Point = tuple[float, float]
 Polygon = list[Point]
@@ -78,3 +78,30 @@ class Task:
     robot: TaskRobot
     metadata: dict[str, Any] = field(default_factory=dict)
     provenance: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class Robot:
+    robot_id: str
+    kinematics: str
+    radius_m: float
+    max_speed_mps: float
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class PlanWaypoint:
+    x: float
+    y: float
+    t: Optional[float] = None
+
+
+@dataclass(frozen=True)
+class PlanResult:
+    planner_name: str
+    success: bool
+    waypoints: Tuple[PlanWaypoint, ...]
+    path_length_m: Optional[float] = None
+    runtime_s: Optional[float] = None
+    message: str = ""
+    metadata: Dict[str, Any] = field(default_factory=dict)

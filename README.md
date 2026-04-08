@@ -1,11 +1,12 @@
 # EvenFlow
 
-EvenFlow is a lightweight specification and tooling library for constructing **data‑grounded navigation benchmarks** from real human trajectory data. It provides:
+EvenFlow is a lightweight specification and tooling library for constructing **data-grounded navigation benchmarks** from real human trajectory data. It provides:
 
-- A small, explicit JSON spec for **layouts**, **scenes**, and **tasks**
+- A small, explicit JSON spec for **layouts**, **scenes**, **tasks**, and **robots**
 - Validation utilities for catching spec errors early
 - Rendering tools for visual debugging
 - Optional overlay of real trajectory CSV data
+- A reference **baseline geometry planner**
 - A clean foundation for planners and evaluation
 
 The goal is to make it easy to go from:
@@ -18,7 +19,7 @@ real trajectories → scene extraction → task definition → planner evaluatio
 
 # Concepts
 
-EvenFlow separates the world into three layers:
+EvenFlow separates the world into four layers:
 
 ## 1. Layout
 The **layout** defines static geometry.
@@ -46,7 +47,7 @@ Layouts are reusable across many scenes and tasks.
 ---
 
 ## 2. Scene
-A **scene** defines a time‑localized slice of human behavior.
+A **scene** defines a time-localized slice of human behavior.
 
 It contains:
 
@@ -84,7 +85,7 @@ It contains:
 
 - robot start
 - robot goal
-- task type (cross‑flow, aligned‑flow, etc)
+- task type (cross-flow, aligned-flow, etc)
 
 Example:
 
@@ -103,8 +104,96 @@ Tasks define **what the robot must do**.
 
 ---
 
+## 4. Robot
+A **robot** defines the embodiment used by planners.
+
+It contains:
+
+- kinematics type
+- footprint geometry
+- size
+- dynamic limits (optional)
+
+Example:
+
+```json
+{
+  "robot_id": "example.disk",
+  "kinematics": "holonomic",
+  "footprint": {
+    "type": "disk",
+    "radius_m": 0.25
+  },
+  "dynamics": {
+    "max_speed_mps": 1.2
+  }
+}
+```
+
+Robots are defined separately so the **same task can be evaluated across different embodiments**.
+
+---
+
+# Baseline Planner
+
+EvenFlow includes a reference planner:
+
+### GeometryPlanner
+
+This planner:
+
+- respects layout boundary
+- respects obstacle polygons
+- respects robot footprint radius
+- plans start → goal
+- ignores human motion
+
+It provides a **minimal geometry baseline** for:
+
+- feasibility checking
+- baseline comparisons
+- regression testing
+- evaluation sanity checks
+
+Example:
+
+```python
+from evenflow import (
+    load_layout,
+    load_scene,
+    load_task,
+    load_robot,
+    GeometryPlanner,
+)
+
+layout = load_layout("layout.json")
+scene = load_scene("scene.json")
+task = load_task("task.json")
+robot = load_robot("robot.json")
+
+planner = GeometryPlanner()
+result = planner.plan(layout, scene, task, robot)
+
+print(result.success)
+print(result.path_length_m)
+```
+
+Planner output:
+
+```
+PlanResult
+    success
+    waypoints
+    path_length_m
+    runtime_s
+    message
+```
+
+---
+
 # Rendering
-EvenFlow includes built‑in rendering for visual debugging.
+
+EvenFlow includes built-in rendering for visual debugging.
 
 ## Layout
 
@@ -121,70 +210,19 @@ evenflow render-scene layout.json scene.json out.png
 ## Scene + Tracks
 
 ```
-evenflow render-scene \
-  layout.json \
-  scene.json \
-  out.png \
-  --show-tracks
+evenflow render-scene   layout.json   scene.json   out.png   --show-tracks
 ```
 
 ## Scene + Task
 
 ```
-evenflow render-scene-task \
-  layout.json \
-  scene.json \
-  task.json \
-  out.png
+evenflow render-scene-task   layout.json   scene.json   task.json   out.png
 ```
 
 ## Scene + Task + Tracks
 
 ```
-evenflow render-scene-task \
-  layout.json \
-  scene.json \
-  task.json \
-  out.png \
-  --show-tracks
-```
-
----
-
-# Track CSV Format
-
-The scene references a CSV file:
-
-```
-tracking.path
-```
-
-The renderer expects:
-
-- track id column
-- timestamp column
-- x/y position columns
-
-Example:
-
-```
-timestamp,person_track_id,bkg_x,bkg_y,vx,vy
-1971...,1001,4.2,6.4,0.1,-0.8
-...
-```
-
-Default coordinate fields:
-
-```
-bkg_x
-bkg_y
-```
-
-Override with:
-
-```
---tracks-x-field
---tracks-y-field
+evenflow render-scene-task   layout.json   scene.json   task.json   out.png   --show-tracks
 ```
 
 ---
@@ -205,79 +243,22 @@ evenflow validate-scene scene.json
 evenflow validate-task task.json
 ```
 
-Validation checks:
-
-- schema correctness
-- layout references
-- geometry consistency
-- task validity
-
----
-
-# Design Principles
-
-EvenFlow is intentionally:
-
-### Minimal
-Small schema, few assumptions.
-
-### Data‑grounded
-Scenes reference real trajectories.
-
-### Planner‑agnostic
-Works with any planner.
-
-### Reproducible
-JSON spec defines the benchmark exactly.
-
-### Visualizable
-Everything can be rendered.
+```
+evenflow validate-robot robot.json
+```
 
 ---
 
 # Typical Workflow
 
 1. Create layout
-
-```
-layout.json
-```
-
-2. Extract human trajectories
-
-```
-tracks.csv
-```
-
+2. Extract trajectories
 3. Define scene
-
-```
-scene.json
-```
-
 4. Define task
-
-```
-task.json
-```
-
-5. Render
-
-```
-evenflow render-scene-task ...
-```
-
-6. Run planner
-
-```
-planner(layout, scene, task)
-```
-
-7. Evaluate
-
-```
-metrics(path, humans)
-```
+5. Define robot
+6. Render
+7. Run planner
+8. Evaluate
 
 ---
 
@@ -287,6 +268,7 @@ metrics(path, humans)
 evenflow/
     models.py
     geometry.py
+    planners.py
     io.py
     validation.py
     render.py
@@ -300,67 +282,19 @@ examples/
     layouts/
     scenes/
     tasks/
+    robots/
     tracks/
 ```
 
 ---
 
-# Roadmap
-
-Planned additions:
-
-- planner interface
-- baseline A*
-- human‑aware cost functions
-- evaluation metrics
-- leaderboard support
-- batch runner
-
----
-
-# Motivation
-
-Most social navigation benchmarks rely on:
-
-- synthetic simulations
-- small datasets
-- hand‑crafted scenarios
-
-EvenFlow instead builds benchmarks from:
-
-- real human trajectories
-- measured flow structure
-- data‑derived interaction regions
-
-This allows evaluation of planners that:
-
-- move with flow
-- avoid disruption
-- exhibit legible behavior
-- respect human conventions
-
----
-
-# License
-
-TBD
-
----
-
 # Status
 
-Early prototype — rendering and validation complete.
+Baseline planner implemented.
 
 Next steps:
 
-- planner API
-- baseline planner
-- evaluation framework
-
----
-
-# Author
-
-David Woollard
-Standard Labs / Standard AI
-
+- human-aware planners
+- flow-aware cost functions
+- evaluation metrics
+- leaderboard support

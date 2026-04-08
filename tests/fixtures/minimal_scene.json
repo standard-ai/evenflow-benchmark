@@ -1,0 +1,23 @@
+{
+  "scene_id": "test.simple",
+  "layout_id": "test.simple_10x10",
+  "window": {
+    "start": "1971-01-01T00:00:00Z",
+    "end": "1971-01-01T00:00:10Z",
+    "duration_s": 10.0
+  },
+  "tracking": {
+    "format": "csv",
+    "path": "../tracks/minimal_scene.tracks.csv",
+    "timestamp_field": "timestamp",
+    "track_id_field": "person_track_id"
+  },
+  "flow": {
+    "p_star": [5.0, 5.0],
+    "u_hat": [0.0, -1.0]
+  },
+  "metadata": {
+    "description": "Minimal test scene"
+  },
+  "provenance": {}
+}
