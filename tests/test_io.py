@@ -23,7 +23,8 @@ def test_load_scene_reads_basic_fields() -> None:
     scene = load_scene(FIXTURES / "minimal_scene.json")
 
     assert scene.scene_id == "test.simple"
-    assert scene.layout_id == "test.simple_10x10"
+    assert scene.layout.layout_id == "test.minimal_layout"
+    assert scene.layout.path == "../fixtures/minimal_layout.json"
     assert scene.window.duration_s == 10.0
     assert scene.flow.p_star == (5.0, 5.0)
 
@@ -31,6 +32,8 @@ def test_load_scene_reads_basic_fields() -> None:
 def test_load_task_reads_basic_fields() -> None:
     task = load_task(FIXTURES / "minimal_task.json")
 
+    assert task.scene.scene_id == "test.simple"
+    assert task.scene.path == "../fixtures/minimal_scene.json"
     assert task.task_type == "cross_flow"
     assert task.robot.start == (1.0, 8.5)
     assert task.robot.goal == (8.5, 2.0)

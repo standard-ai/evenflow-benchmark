@@ -1,5 +1,5 @@
 from .evaluation import evaluate_plan
-from .io import load_eval, load_layout, load_plan, load_robot, load_scene, load_task, save_eval
+from .io import load_eval, load_layout, load_plan, load_robot, load_scene, load_task, save_eval, save_plan 
 from .models import (
     EvalResult,
     Exit,
@@ -10,10 +10,12 @@ from .models import (
     Robot,
     Scene,
     SceneFlow,
+    SceneLayoutRef,
     SceneTracking,
     SceneWindow,
     Task,
     TaskRobot,
+    TaskSceneRef,
 )
 from .planner import BasePlanner
 from .planners import GeometryPlanner
@@ -39,9 +41,11 @@ __all__ = [
     "Robot",
     "Scene",
     "SceneFlow",
+    "SceneLayoutRef",
     "SceneTracking",
     "SceneWindow",
     "Task",
+    "TaskSceneRef",
     "TaskRobot",
     "evaluate_plan",
     "load_eval",
@@ -58,4 +62,5 @@ __all__ = [
     "save_plan_figure",
     "save_scene_task_plan_figure",
     "save_task_figure",
+    "save_plan",
 ]

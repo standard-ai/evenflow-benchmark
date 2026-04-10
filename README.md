@@ -7,7 +7,8 @@ EvenFlow is a lightweight specification and tooling library for constructing **d
 - Rendering tools for visual debugging
 - Optional overlay of real trajectory CSV data
 - A reference **baseline geometry planner**
-- A clean foundation for planners and evaluation
+- A clean foundation for planners and **evaluation**
+- CLI tools for **planning, rendering, and evaluation**
 
 The goal is to make it easy to go from:
 
@@ -22,6 +23,7 @@ real trajectories → scene extraction → task definition → planner evaluatio
 EvenFlow separates the world into four layers:
 
 ## 1. Layout
+
 The **layout** defines static geometry.
 
 It contains:
@@ -47,6 +49,7 @@ Layouts are reusable across many scenes and tasks.
 ---
 
 ## 2. Scene
+
 A **scene** defines a time-localized slice of human behavior.
 
 It contains:
@@ -64,7 +67,9 @@ Example:
   "scene_id": "example.scene_001",
   "layout_id": "example.simple_10x10",
   "window": {...},
-  "tracking": {...},
+  "tracking": {
+    "path": "scene_001.tracks.csv"
+  },
   "flow": {
     "p_star": [5.0, 5.0],
     "u_hat": [0.0, -1.0]
@@ -79,6 +84,7 @@ They represent **where and how humans are moving**.
 ---
 
 ## 3. Task
+
 A **task** defines a robot navigation problem inside a scene.
 
 It contains:
@@ -105,6 +111,7 @@ Tasks define **what the robot must do**.
 ---
 
 ## 4. Robot
+
 A **robot** defines the embodiment used by planners.
 
 It contains:
@@ -158,44 +165,15 @@ It provides a **minimal geometry baseline** for:
 Example:
 
 ```python
-from evenflow import (
-    load_layout,
-    load_scene,
-    load_task,
-    load_robot,
-    GeometryPlanner,
-)
-
-layout = load_layout("layout.json")
-scene = load_scene("scene.json")
-task = load_task("task.json")
-robot = load_robot("robot.json")
-
 planner = GeometryPlanner()
 result = planner.plan(layout, scene, task, robot)
-
-print(result.success)
-print(result.path_length_m)
-```
-
-Planner output:
-
-```
-PlanResult
-    success
-    waypoints
-    path_length_m
-    runtime_s
-    message
 ```
 
 ---
 
-
 # Planner Output Specification
 
-Planners must return a `PlanResult` object. This defines the standard output
-format used for rendering, validation, and evaluation.
+Planners must return a `PlanResult`.
 
 ```python
 PlanResult(
@@ -221,121 +199,125 @@ PlanWaypoint(
 
 Notes:
 
-- `waypoints` must contain at least **start and goal** if `success=True`
-- timestamps are optional
-- if timestamps are provided, they must be **monotonic**
-- failed plans should return `success=False` and empty waypoints
-- `path_length_m` and `runtime_s` are optional but recommended
+- timestamps optional
+- must contain ≥ 2 waypoints if success=True
+- timestamps must be monotonic if provided
 
+---
 
-## Planner Output Validation
+# Evaluation
 
-EvenFlow validates planner outputs to ensure consistency across benchmarks.
+EvenFlow includes a **first-pass evaluation framework** for comparing planners.
 
-Validation checks:
+Current metrics:
 
-- planner_name must be non-empty
-- successful plans must contain ≥ 2 waypoints
-- failed plans must contain 0 waypoints
-- waypoint coordinates must be finite
-- timestamps must be all-present or all-omitted
-- timestamps must be nondecreasing
-- runtime must be nonnegative
-- path_length must be nonnegative
+```
+EvalResult
+    success
+    path_length_m
+    runtime_s
+    num_waypoints
+    min_human_distance_m
+    message
+```
 
+### min_human_distance_m
+
+Minimum Euclidean distance between:
+
+- robot path (polyline)
+- all human track points in scene window
+
+This provides a **first scene-aware safety metric**.
+
+---
+
+# Evaluate a Plan
+
+```
+evenflow evaluate-plan     layout.json     scene.json     task.json     robot.json     plan.json
+```
+
+Example output:
+
+```
+Evaluation OK
+  success: True
+  path_length_m: 14.0
+  runtime_s: 0.002
+  num_waypoints: 3
+  min_human_distance_m: 3.36
+  message: ok
+```
+
+This command:
+
+1. loads layout
+2. loads scene
+3. loads task
+4. loads robot
+5. loads plan
+6. loads scene track CSV
+7. computes evaluation metrics
+
+---
 
 # Rendering Planner Outputs
 
-EvenFlow can render planner results:
+Render plan:
 
 ```
-evenflow render-plan     layout.json     plan.json     out.png
+evenflow render-plan layout.json plan.json out.png
 ```
 
-Or:
+Render full context:
 
 ```
 evenflow render-scene-task-plan     layout.json     scene.json     task.json     plan.json     out.png
 ```
 
-This is useful for:
-
-- debugging planners
-- visual validation
-- benchmark submissions
-
-
-## Example Plan JSON
-
-```json
-{
-  "planner_name": "geometry",
-  "success": true,
-  "waypoints": [
-    { "x": 1.0, "y": 8.5, "t": null },
-    { "x": 8.5, "y": 8.5, "t": null },
-    { "x": 8.5, "y": 2.0, "t": null }
-  ],
-  "path_length_m": 14.0,
-  "runtime_s": 0.002,
-  "message": "ok"
-}
-```
-
+---
 
 # Rendering
 
-EvenFlow includes built-in rendering for visual debugging.
-
-## Layout
+Layout
 
 ```
 evenflow render-layout layout.json out.png
 ```
 
-## Scene
+Scene
 
 ```
 evenflow render-scene layout.json scene.json out.png
 ```
 
-## Scene + Tracks
+Scene + tracks
 
 ```
-evenflow render-scene   layout.json   scene.json   out.png   --show-tracks
+evenflow render-scene layout.json scene.json out.png --show-tracks
 ```
 
-## Scene + Task
+Scene + task
 
 ```
-evenflow render-scene-task   layout.json   scene.json   task.json   out.png
+evenflow render-scene-task layout.json scene.json task.json out.png
 ```
 
-## Scene + Task + Tracks
+Scene + task + plan
 
 ```
-evenflow render-scene-task   layout.json   scene.json   task.json   out.png   --show-tracks
+evenflow render-scene-task-plan     layout.json     scene.json     task.json     plan.json     out.png
 ```
 
 ---
 
 # Validation
 
-EvenFlow includes validation tools:
-
 ```
 evenflow validate-layout layout.json
-```
-
-```
 evenflow validate-scene scene.json
-```
-
-```
 evenflow validate-task task.json
-```
-
-```
 evenflow validate-robot robot.json
 ```
 
@@ -343,14 +325,14 @@ evenflow validate-robot robot.json
 
 # Typical Workflow
 
-1. Create layout
-2. Extract trajectories
-3. Define scene
-4. Define task
-5. Define robot
-6. Render
-7. Run planner
-8. Evaluate
+1. Create layout  
+2. Extract trajectories  
+3. Define scene  
+4. Define task  
+5. Define robot  
+6. Run planner  
+7. Evaluate planner  
+8. Compare planners  
 
 ---
 
@@ -362,6 +344,7 @@ evenflow/
     geometry.py
     planners.py
     io.py
+    evaluation.py
     validation.py
     render.py
     cli.py
@@ -376,17 +359,5 @@ examples/
     tasks/
     robots/
     tracks/
+    plans/
 ```
-
----
-
-# Status
-
-Baseline planner implemented.
-
-Next steps:
-
-- human-aware planners
-- flow-aware cost functions
-- evaluation metrics
-- leaderboard support

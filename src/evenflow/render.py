@@ -28,21 +28,47 @@ def render_layout(
     else:
         fig = ax.figure
 
-    ax.add_patch(MplPolygon(layout.boundary, closed=True, fill=False, linewidth=2))
+    ax.add_patch(
+        MplPolygon(
+            layout.boundary,
+            closed=True,
+            fill=False,
+            linewidth=2,
+            edgecolor="black",
+            zorder=1,
+        )
+    )
 
     for obs in layout.obstacles:
-        ax.add_patch(MplPolygon(obs.polygon, closed=True, alpha=0.35))
+        ax.add_patch(
+            MplPolygon(
+                obs.polygon,
+                closed=True,
+                facecolor="#4C78A8",
+                edgecolor="none",
+                alpha=0.25,
+                zorder=1,
+            )
+        )
         if show_obstacle_labels:
             cx, cy = centroid(obs.polygon)
-            ax.text(cx, cy, obs.id, fontsize=6, ha="center", va="center")
+            ax.text(cx, cy, obs.id, fontsize=6, ha="center", va="center", zorder=2)
 
     for ex in layout.exits:
         ax.add_patch(
-            MplPolygon(ex.polygon, closed=True, fill=False, linestyle="--", linewidth=1.5)
+            MplPolygon(
+                ex.polygon,
+                closed=True,
+                fill=False,
+                linestyle="--",
+                linewidth=1.5,
+                edgecolor="black",
+                zorder=1,
+            )
         )
         if show_exit_labels:
             cx, cy = centroid(ex.polygon)
-            ax.text(cx, cy, ex.id, fontsize=7, ha="center", va="center")
+            ax.text(cx, cy, ex.id, fontsize=7, ha="center", va="center", zorder=2)
 
     min_x, min_y, max_x, max_y = bounds(layout.boundary)
     ax.set_xlim(min_x - padding, max_x + padding)
@@ -51,7 +77,7 @@ def render_layout(
     ax.set_xlabel("x (m)")
     ax.set_ylabel("y (m)")
     ax.set_title(title or f"EvenFlow Layout: {layout.layout_id}")
-    ax.grid(grid, alpha=0.3)
+    ax.grid(grid, alpha=0.25)
 
     return fig, ax
 
@@ -59,7 +85,12 @@ def render_layout(
 def _legend_outside(ax: Axes) -> None:
     handles, labels = ax.get_legend_handles_labels()
     if handles:
-        ax.legend(loc="center left", bbox_to_anchor=(1.02, 0.5), borderaxespad=0.0)
+        ax.legend(
+            loc="upper left",
+            bbox_to_anchor=(1.02, 1.0),
+            borderaxespad=0.0,
+            frameon=True,
+        )
 
 
 def _scene_tracking_csv_path(scene_json_path: str | Path, tracking_rel_path: str) -> Path:
@@ -74,8 +105,8 @@ def draw_scene_tracks(
     x_field: str = "bkg_x",
     y_field: str = "bkg_y",
     max_tracks: int | None = None,
-    alpha: float = 0.8,
-    linewidth: float = 1.5,
+    alpha: float = 0.45,
+    linewidth: float = 1.0,
 ) -> None:
     if scene.tracking.format.lower() != "csv":
         raise ValueError(f"Unsupported tracking format: {scene.tracking.format}")
@@ -121,23 +152,20 @@ def draw_scene(
 
     if show_p_star and scene.flow.p_star is not None:
         px, py = scene.flow.p_star
-        ax.plot(
+        ax.scatter(
             [px],
             [py],
             marker="*",
-            linestyle="None",
-            markersize=14,
-            zorder=4,
+            s=260,
+            edgecolors="black",
+            linewidths=1.0,
+            zorder=20,
             label="p*",
         )
         if annotate:
-            ax.text(px, py, "p*", fontsize=8, ha="left", va="bottom")
+            ax.text(px + 0.05, py + 0.05, "p*", fontsize=9, ha="left", va="bottom", zorder=21)
 
-    if (
-        show_u_hat
-        and scene.flow.p_star is not None
-        and scene.flow.u_hat is not None
-    ):
+    if show_u_hat and scene.flow.p_star is not None and scene.flow.u_hat is not None:
         px, py = scene.flow.p_star
         ux, uy = scene.flow.u_hat
 
@@ -152,11 +180,11 @@ def draw_scene(
                 ux * u_hat_scale,
                 uy * u_hat_scale,
                 length_includes_head=True,
-                head_width=0.15,
-                head_length=0.25,
+                head_width=0.14,
+                head_length=0.22,
                 linewidth=2,
-                alpha=0.8,
-                zorder=3,
+                alpha=0.9,
+                zorder=19,
             )
 
             if annotate:
@@ -167,6 +195,7 @@ def draw_scene(
                     fontsize=8,
                     ha="left",
                     va="bottom",
+                    zorder=20,
                 )
 
 
@@ -184,10 +213,11 @@ def draw_task(
         ax.plot(
             [sx, gx],
             [sy, gy],
-            linestyle="-",
-            linewidth=1.8,
-            alpha=0.6,
-            zorder=1,
+            linestyle="--",
+            color="gray",
+            linewidth=1.5,
+            alpha=0.7,
+            zorder=3,
             label="straight-line",
         )
 
@@ -196,8 +226,8 @@ def draw_task(
         [sy],
         marker="o",
         linestyle="None",
-        markersize=8,
-        zorder=5,
+        markersize=9,
+        zorder=8,
         label="start",
     )
 
@@ -206,15 +236,15 @@ def draw_task(
         [gy],
         marker="x",
         linestyle="None",
-        markersize=9,
-        mew=2,
-        zorder=5,
+        markersize=10,
+        mew=2.2,
+        zorder=8,
         label="goal",
     )
 
     if annotate:
-        ax.text(sx, sy, "start", fontsize=8, ha="left", va="bottom")
-        ax.text(gx, gy, "goal", fontsize=8, ha="left", va="bottom")
+        ax.text(sx, sy, "start", fontsize=8, ha="left", va="bottom", zorder=9)
+        ax.text(gx, gy, "goal", fontsize=8, ha="left", va="bottom", zorder=9)
 
 
 def draw_plan(
@@ -223,14 +253,9 @@ def draw_plan(
     *,
     annotate: bool = False,
     show_waypoints: bool = False,
-    linewidth: float = 2.5,
-    alpha: float = 0.9,
+    linewidth: float = 3.0,
+    alpha: float = 0.95,
 ) -> None:
-    """
-    Draw a planner output on an existing axes.
-
-    If the plan is unsuccessful or has no waypoints, nothing is drawn.
-    """
     if not plan.success or not plan.waypoints:
         return
 
@@ -242,7 +267,9 @@ def draw_plan(
         ys,
         linewidth=linewidth,
         alpha=alpha,
-        zorder=6,
+        zorder=10,
+        solid_joinstyle="round",
+        solid_capstyle="round",
         label=f"plan:{plan.planner_name}",
     )
 
@@ -252,17 +279,15 @@ def draw_plan(
             ys,
             marker=".",
             linestyle="None",
-            markersize=6,
+            markersize=5,
             alpha=alpha,
-            zorder=7,
+            zorder=11,
             label="plan-waypoints",
         )
 
-    if annotate and plan.waypoints:
-        start = plan.waypoints[0]
-        end = plan.waypoints[-1]
-        ax.text(start.x, start.y, f"{plan.planner_name}:start", fontsize=8, ha="left", va="bottom")
-        ax.text(end.x, end.y, f"{plan.planner_name}:end", fontsize=8, ha="left", va="bottom")
+    if annotate:
+        ax.text(xs[0], ys[0] + 0.08, "start", fontsize=8, ha="left", va="bottom", zorder=12)
+        ax.text(xs[-1], ys[-1] + 0.08, "goal", fontsize=8, ha="left", va="bottom", zorder=12)
 
 
 def save_layout_figure(layout: Layout, out_path: str | Path, **kwargs) -> None:

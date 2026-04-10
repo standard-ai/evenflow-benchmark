@@ -1,6 +1,9 @@
 {
   "task_id": "test.cross_001",
-  "scene_id": "test.simple",
+  "scene": {
+    "scene_id": "test.simple",
+    "path": "../fixtures/minimal_scene.json"
+  },
   "task_type": "cross_flow",
   "robot": {
     "start": [1.0, 8.5],

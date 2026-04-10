@@ -14,10 +14,12 @@ from .models import (
     Robot,
     Scene,
     SceneFlow,
+    SceneLayoutRef,
     SceneTracking,
     SceneWindow,
     Task,
     TaskRobot,
+    TaskSceneRef,
 )
 from .validation import validate_layout
 
@@ -65,21 +67,41 @@ def load_scene(path: str | Path, *, validate: bool = True) -> Scene:
     data = _read_json(path)
 
     window_data = data["window"]
+    layout_data = data["layout"]
     tracking_data = data["tracking"]
     flow_data = data.get("flow")
 
     scene = Scene(
         scene_id=data.get("scene_id", Path(path).stem),
-        layout_id=data["layout_id"],
+        layout=SceneLayoutRef(
+            layout_id=layout_data["layout_id"],
+            path=layout_data["path"],
+            coordinate_frame=layout_data.get("coordinate_frame"),
+            metadata={
+                k: v
+                for k, v in layout_data.items()
+                if k not in {"layout_id", "path", "coordinate_frame"}
+            },
+        ),
         tracking=SceneTracking(
+            tracking_id=tracking_data.get("tracking_id"),
             format=tracking_data["format"],
             path=tracking_data["path"],
             timestamp_field=tracking_data["timestamp_field"],
             track_id_field=tracking_data["track_id_field"],
+            coordinate_frame=tracking_data.get("coordinate_frame"),
             metadata={
                 k: v
                 for k, v in tracking_data.items()
-                if k not in {"format", "path", "timestamp_field", "track_id_field"}
+                if k
+                not in {
+                    "tracking_id",
+                    "format",
+                    "path",
+                    "timestamp_field",
+                    "track_id_field",
+                    "coordinate_frame",
+                }
             },
         ),
         window=SceneWindow(
@@ -88,13 +110,20 @@ def load_scene(path: str | Path, *, validate: bool = True) -> Scene:
             duration_s=window_data.get("duration_s"),
         ),
         flow=SceneFlow(
-            p_star=tuple(flow_data["p_star"]) if flow_data and flow_data.get("p_star") else None,
-            u_hat=tuple(flow_data["u_hat"]) if flow_data and flow_data.get("u_hat") else None,
+            p_star=tuple(flow_data["p_star"])
+            if flow_data and flow_data.get("p_star")
+            else None,
+            u_hat=tuple(flow_data["u_hat"])
+            if flow_data and flow_data.get("u_hat")
+            else None,
             metadata={
-                k: v for k, v in (flow_data or {}).items()
+                k: v
+                for k, v in (flow_data or {}).items()
                 if k not in {"p_star", "u_hat"}
             },
-        ) if flow_data else None,
+        )
+        if flow_data
+        else None,
         metadata=data.get("metadata", {}),
         provenance=data.get("provenance", {}),
     )
@@ -110,10 +139,18 @@ def load_task(path: str | Path, *, validate: bool = True) -> Task:
     data = _read_json(path)
 
     robot_data = data["robot"]
+    scene_data = data["scene"]
 
     task = Task(
         task_id=data.get("task_id", Path(path).stem),
-        scene_id=data["scene_id"],
+        scene=TaskSceneRef(
+            scene_id=scene_data["scene_id"],
+            path=scene_data["path"],
+            metadata={
+                k: v for k, v in scene_data.items()
+                if k not in {"scene_id", "path"}
+            },
+        ),
         task_type=data["task_type"],
         robot=TaskRobot(
             start=tuple(robot_data["start"]),
@@ -186,6 +223,26 @@ def load_plan(path: str | Path, *, validate: bool = True) -> PlanResult:
     return plan
 
 
+def save_plan(path: str | Path, plan: PlanResult) -> None:
+    data = {
+        "planner_name": plan.planner_name,
+        "success": plan.success,
+        "waypoints": [
+            {
+                "x": wp.x,
+                "y": wp.y,
+                "t": wp.t,
+            }
+            for wp in plan.waypoints
+        ],
+        "path_length_m": plan.path_length_m,
+        "runtime_s": plan.runtime_s,
+        "message": plan.message,
+        "metadata": plan.metadata,
+    }
+    _write_json(path, data)
+
+
 def load_eval(path: str | Path, *, validate: bool = False) -> EvalResult:
     data = _read_json(path)
 
@@ -202,6 +259,11 @@ def load_eval(path: str | Path, *, validate: bool = False) -> EvalResult:
             else None
         ),
         num_waypoints=int(data["num_waypoints"]),
+        min_human_distance_m=(
+            float(data["min_human_distance_m"])
+            if data.get("min_human_distance_m") is not None
+            else None
+        ),
         message=data.get("message", ""),
         metadata=data.get("metadata", {}),
     )
@@ -219,6 +281,7 @@ def save_eval(path: str | Path, result: EvalResult) -> None:
         "path_length_m": result.path_length_m,
         "runtime_s": result.runtime_s,
         "num_waypoints": result.num_waypoints,
+        "min_human_distance_m": result.min_human_distance_m,
         "message": result.message,
         "metadata": result.metadata,
     }

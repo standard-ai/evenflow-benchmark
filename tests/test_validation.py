@@ -12,10 +12,12 @@ from evenflow.models import (
     Robot,
     Scene,
     SceneFlow,
+    SceneLayoutRef,
     SceneTracking,
     SceneWindow,
     Task,
     TaskRobot,
+    TaskSceneRef,
 )
 from evenflow.validation import (
     ValidationError,
@@ -52,12 +54,18 @@ def test_validate_layout_rejects_too_small_boundary() -> None:
 def test_validate_scene_accepts_valid_scene() -> None:
     scene = Scene(
         scene_id="scene_1",
-        layout_id="layout_1",
+        layout=SceneLayoutRef(
+            layout_id="layout_1",
+            path="../fixtures/layout_1.json",
+            coordinate_frame="layout_xy_meters",
+        ),
         tracking=SceneTracking(
+            tracking_id="scene_1",
             format="csv",
             path="tracks/scene_1.csv",
             timestamp_field="timestamp",
             track_id_field="person_track_id",
+            coordinate_frame="layout_xy_meters",
         ),
         window=SceneWindow(
             start="1971-01-01T00:00:00Z",
@@ -76,8 +84,12 @@ def test_validate_scene_accepts_valid_scene() -> None:
 def test_validate_scene_requires_tracking_path() -> None:
     scene = Scene(
         scene_id="scene_1",
-        layout_id="layout_1",
+        layout=SceneLayoutRef(
+            layout_id="layout_1",
+            path="../fixtures/layout_1.json",
+        ),
         tracking=SceneTracking(
+            tracking_id="scene_1",
             format="csv",
             path="",
             timestamp_field="timestamp",
@@ -96,7 +108,10 @@ def test_validate_scene_requires_tracking_path() -> None:
 def test_validate_task_accepts_valid_task() -> None:
     task = Task(
         task_id="task_1",
-        scene_id="scene_1",
+        scene=TaskSceneRef(
+            scene_id="scene_1",
+            path="../fixtures/scene_1.json",
+        ),
         task_type="cross_flow",
         robot=TaskRobot(start=(1.0, 8.0), goal=(8.0, 2.0)),
     )
@@ -107,12 +122,15 @@ def test_validate_task_accepts_valid_task() -> None:
 def test_validate_task_requires_scene_id() -> None:
     task = Task(
         task_id="task_1",
-        scene_id="",
+        scene=TaskSceneRef(
+            scene_id="",
+            path="../fixtures/scene_1.json",
+        ),
         task_type="cross_flow",
         robot=TaskRobot(start=(1.0, 8.0), goal=(8.0, 2.0)),
     )
 
-    with pytest.raises(ValidationError, match="scene_id is required"):
+    with pytest.raises(ValidationError, match="task.scene.scene_id is required"):
         validate_task(task)
 
 

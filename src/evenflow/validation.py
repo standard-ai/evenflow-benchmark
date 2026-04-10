@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .models import Layout, PlanResult, PlanWaypoint, Polygon, Robot, Scene, Task
+from .models import EvalResult, Layout, PlanResult, PlanWaypoint, Polygon, Robot, Scene, Task
 
 
 class ValidationError(ValueError):
@@ -36,11 +36,14 @@ def _validate_plan_waypoint(name: str, waypoint: PlanWaypoint) -> None:
 def validate_layout(layout: Layout) -> None:
     if not layout.layout_id:
         raise ValidationError("layout_id is required")
+
     _validate_polygon("boundary", layout.boundary)
+
     for obs in layout.obstacles:
         if not obs.id:
             raise ValidationError("Each obstacle must have an id")
         _validate_polygon(f"obstacle:{obs.id}", obs.polygon)
+
     for ex in layout.exits:
         if not ex.id:
             raise ValidationError("Each exit must have an id")
@@ -51,8 +54,11 @@ def validate_scene(scene: Scene) -> None:
     if not scene.scene_id:
         raise ValidationError("scene_id is required")
 
-    if not scene.layout_id:
-        raise ValidationError("layout_id is required")
+    if not scene.layout.layout_id:
+        raise ValidationError("scene.layout.layout_id is required")
+
+    if not scene.layout.path:
+        raise ValidationError("scene.layout.path is required")
 
     if not scene.tracking.format:
         raise ValidationError("scene.tracking.format is required")
@@ -87,8 +93,11 @@ def validate_task(task: Task) -> None:
     if not task.task_id:
         raise ValidationError("task_id is required")
 
-    if not task.scene_id:
-        raise ValidationError("scene_id is required")
+    if not task.scene.scene_id:
+        raise ValidationError("task.scene.scene_id is required")
+
+    if not task.scene.path:
+        raise ValidationError("task.scene.path is required")
 
     if not task.task_type:
         raise ValidationError("task_type is required")
@@ -132,7 +141,6 @@ def validate_plan_result(plan: PlanResult) -> None:
     for i, waypoint in enumerate(plan.waypoints):
         _validate_plan_waypoint(f"waypoints[{i}]", waypoint)
 
-    # If timestamps are provided, require monotone nondecreasing order.
     ts = [wp.t for wp in plan.waypoints]
     if any(t is not None for t in ts):
         if not all(t is not None for t in ts):
@@ -148,3 +156,25 @@ def validate_plan_result(plan: PlanResult) -> None:
 
     if plan.runtime_s is not None and plan.runtime_s < 0:
         raise ValidationError("runtime_s must be nonnegative")
+
+def validate_eval_result(result: EvalResult) -> None:
+    if not isinstance(result.success, bool):
+        raise ValidationError("success must be a bool")
+
+    if result.path_length_m is not None and result.path_length_m < 0:
+        raise ValidationError("path_length_m must be nonnegative")
+
+    if result.runtime_s is not None and result.runtime_s < 0:
+        raise ValidationError("runtime_s must be nonnegative")
+
+    if not isinstance(result.num_waypoints, int):
+        raise ValidationError("num_waypoints must be an int")
+
+    if result.num_waypoints < 0:
+        raise ValidationError("num_waypoints must be nonnegative")
+
+    if (
+        result.min_human_distance_m is not None
+        and result.min_human_distance_m < 0
+    ):
+        raise ValidationError("min_human_distance_m must be nonnegative")

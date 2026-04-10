@@ -31,6 +31,14 @@ class Layout:
 
 
 @dataclass(slots=True)
+class SceneLayoutRef:
+    layout_id: str
+    path: str
+    coordinate_frame: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
 class SceneWindow:
     start: str
     end: str
@@ -39,10 +47,12 @@ class SceneWindow:
 
 @dataclass(slots=True)
 class SceneTracking:
-    format: str
-    path: str
-    timestamp_field: str
-    track_id_field: str
+    tracking_id: str | None = None
+    format: str = "csv"
+    path: str = ""
+    timestamp_field: str = "timestamp"
+    track_id_field: str = "person_track_id"
+    coordinate_frame: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -56,12 +66,19 @@ class SceneFlow:
 @dataclass(slots=True)
 class Scene:
     scene_id: str
-    layout_id: str
+    layout: SceneLayoutRef
     tracking: SceneTracking
     window: SceneWindow
     flow: SceneFlow | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
     provenance: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class TaskSceneRef:
+    scene_id: str
+    path: str
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -73,7 +90,7 @@ class TaskRobot:
 @dataclass(slots=True)
 class Task:
     task_id: str
-    scene_id: str
+    scene: TaskSceneRef
     task_type: str
     robot: TaskRobot
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -134,5 +151,6 @@ class EvalResult:
     path_length_m: float | None
     runtime_s: float | None
     num_waypoints: int
+    min_human_distance_m: float | None = None
     message: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)

@@ -1,15 +1,21 @@
 {
-  "schema_version": "0.2",
+  "schema_version": "0.3",
   "scene_id": "example.simple_10x10.scene_001",
-  "layout_id": "example.simple_10x10",
+  "layout": {
+    "layout_id": "example.simple_10x10",
+    "path": "../layouts/example.simple_10x10.layout.json",
+    "coordinate_frame": "layout_xy_meters",
+    "notes": "Scene geometry is expressed in the referenced layout frame."
+  },
   "window": {
     "start": "1971-01-01T12:00:00Z",
     "end": "1971-01-01T12:00:10Z",
     "duration_s": 10.0
   },
   "tracking": {
+    "tracking_id": "example.simple_10x10.scene_001",
     "format": "csv",
-    "path": "../tracks/simple_10x10.scene_001.tracks.csv",
+    "path": "../tracks/example.simple_10x10.scene_001.tracks.csv",
     "timestamp_field": "timestamp",
     "track_id_field": "person_track_id",
     "coordinate_frame": "layout_xy_meters",
@@ -32,7 +38,7 @@
   "provenance": {
     "generator": {
       "name": "manual_example",
-      "version": "0.1.0"
+      "version": "0.2.0"
     },
     "generated_at": "2026-04-07T00:00:00Z"
   }

@@ -1,7 +1,11 @@
 {
-  "schema_version": "0.1",
+  "schema_version": "0.3",
   "task_id": "example.simple_10x10.cross_001",
-  "scene_id": "example.simple_10x10.scene_001",
+  "scene": {
+    "scene_id": "example.simple_10x10.scene_001",
+    "path": "../scenes/example.simple_10x10.scene_001.scene.json",
+    "notes": "Task resolves its scenario through the referenced scene bundle."
+  },
   "task_type": "cross_flow",
   "robot": {
     "start": [
@@ -19,7 +23,7 @@
   "provenance": {
     "generator": {
       "name": "manual_example",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "git_commit": null
     },
     "generated_at": "2026-04-07T00:00:00Z",

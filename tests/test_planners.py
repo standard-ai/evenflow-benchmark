@@ -35,11 +35,14 @@ def test_geometry_planner_can_fail_for_impossible_goal() -> None:
     scene = load_scene(FIXTURES / "minimal_scene.json")
     robot = load_robot(FIXTURES / "minimal_robot.json")
 
-    from evenflow.models import Task, TaskRobot
+    from evenflow.models import Task, TaskRobot, TaskSceneRef
 
     bad_task = Task(
         task_id="bad_task",
-        scene_id=scene.scene_id,
+        scene=TaskSceneRef(
+            scene_id=scene.scene_id,
+            path="../fixtures/minimal_scene.json",
+        ),
         task_type="cross_flow",
         robot=TaskRobot(start=(1.0, 8.5), goal=(-999.0, -999.0)),
     )

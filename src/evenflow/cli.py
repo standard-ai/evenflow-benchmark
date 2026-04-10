@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
 from .evaluation import evaluate_plan
-from .io import load_layout, load_plan, load_robot, load_scene, load_task
+from .io import load_layout, load_plan, load_robot, load_scene, load_task, save_plan
+from .planners import GeometryPlanner
 from .render import (
     save_layout_figure,
     save_plan_figure,
@@ -19,6 +21,11 @@ from .validation import (
     validate_scene,
     validate_task,
 )
+
+
+def _resolve_relative(base_file: str | Path, relative_path: str) -> Path:
+    base = Path(base_file).resolve().parent
+    return (base / relative_path).resolve()
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -166,6 +173,14 @@ def build_parser() -> argparse.ArgumentParser:
     evaluate_plan_parser.add_argument("task_json")
     evaluate_plan_parser.add_argument("robot_json")
     evaluate_plan_parser.add_argument("plan_json")
+
+    run_geometry_parser = subparsers.add_parser(
+        "run-geometry",
+        help="Run the baseline geometry planner from task + robot and write a plan JSON",
+    )
+    run_geometry_parser.add_argument("task_json")
+    run_geometry_parser.add_argument("robot_json")
+    run_geometry_parser.add_argument("plan_json")
 
     return parser
 
@@ -343,16 +358,59 @@ def cmd_evaluate_plan(args: argparse.Namespace) -> int:
     robot = load_robot(args.robot_json)
     plan = load_plan(args.plan_json)
 
-    result = evaluate_plan(layout, scene, task, robot, plan)
+    result = evaluate_plan(
+        layout,
+        scene,
+        task,
+        robot,
+        plan,
+        scene_json_path=args.scene_json,
+    )
 
     print("Evaluation OK")
     print(f"  success: {result.success}")
     print(f"  path_length_m: {result.path_length_m}")
     print(f"  runtime_s: {result.runtime_s}")
     print(f"  num_waypoints: {result.num_waypoints}")
+    print(f"  min_human_distance_m: {result.min_human_distance_m}")
     if result.message:
         print(f"  message: {result.message}")
 
+    return 0
+
+
+def cmd_run_geometry(args: argparse.Namespace) -> int:
+    task = load_task(args.task_json)
+    robot = load_robot(args.robot_json)
+
+    # load scene from task reference
+    scene_json_path = _resolve_relative(args.task_json, task.scene.path)
+    scene = load_scene(scene_json_path)
+
+    # sanity check IDs match
+    if scene.scene_id != task.scene.scene_id:
+        raise ValueError(
+            f"Scene ID mismatch: task expects {task.scene.scene_id!r} "
+            f"but loaded {scene.scene_id!r}"
+        )
+
+    # load layout from scene reference
+    layout_json_path = _resolve_relative(scene_json_path, scene.layout.path)
+    layout = load_layout(layout_json_path)
+
+    # sanity check layout IDs
+    if layout.layout_id != scene.layout.layout_id:
+        raise ValueError(
+            f"Layout ID mismatch: scene expects {scene.layout.layout_id!r} "
+            f"but loaded {layout.layout_id!r}"
+        )
+
+    planner = GeometryPlanner()
+    plan = planner.plan(layout, scene, task, robot)
+
+    save_plan(args.plan_json, plan)
+
+    print(f"Wrote {args.plan_json}")
     return 0
 
 
@@ -384,6 +442,8 @@ def main() -> int:
         return cmd_validate_plan(args)
     if args.command == "evaluate-plan":
         return cmd_evaluate_plan(args)
+    if args.command == "run-geometry":
+        return cmd_run_geometry(args)
 
     parser.error(f"Unknown command: {args.command}")
     return 2
