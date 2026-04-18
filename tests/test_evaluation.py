@@ -99,7 +99,7 @@ def task() -> Task:
         task_id="test.cross_flow.001",
         scene=TaskSceneRef(scene_id="test.cross_flow.scene", path="minimal_scene.json"),
         task_type="cross_flow",
-        robot=TaskRobot(start=(1.0, 8.5), goal=(8.5, 2.0)),
+        robot=TaskRobot(start=(1.0, 8.5), goal=(8.0, 2.0)),
         target=TaskTargetRef(track_id="t1"),
         metadata={},
         provenance={},
@@ -119,13 +119,14 @@ def robot() -> Robot:
 
 @pytest.fixture
 def target_track() -> TrackSimple:
+    # Ends exactly at the task goal to make goal completion checks crisp.
     return TrackSimple(
         track_id="t1",
         timestamps=np.array([0.0, 1.0, 2.0, 3.0], dtype=float),
-        x=np.array([1.0, 3.0, 5.0, 7.0], dtype=float),
-        y=np.array([8.5, 6.5, 4.5, 2.5], dtype=float),
-        vx=np.array([2.0, 2.0, 2.0, 2.0], dtype=float),
-        vy=np.array([-2.0, -2.0, -2.0, -2.0], dtype=float),
+        x=np.array([1.0, 3.0, 5.5, 8.0], dtype=float),
+        y=np.array([8.5, 6.5, 4.25, 2.0], dtype=float),
+        vx=np.array([2.0, 2.5, 2.5, 2.5], dtype=float),
+        vy=np.array([-2.0, -2.25, -2.25, -2.25], dtype=float),
         position_valid=np.array([True, True, True, True]),
         velocity_valid=np.array([True, True, True, True]),
         metadata={},
@@ -163,7 +164,11 @@ def other_track_b() -> TrackSimple:
 
 
 @pytest.fixture
-def store(target_track: TrackSimple, other_track_a: TrackSimple, other_track_b: TrackSimple) -> TrackStore:
+def store(
+    target_track: TrackSimple,
+    other_track_a: TrackSimple,
+    other_track_b: TrackSimple,
+) -> TrackStore:
     timestamps = np.concatenate(
         [target_track.timestamps, other_track_a.timestamps, other_track_b.timestamps]
     )
@@ -201,7 +206,12 @@ def store(target_track: TrackSimple, other_track_a: TrackSimple, other_track_b: 
     )
 
 
-def _make_plan(track: TrackSimple, *, planner_name: str = "test_planner", success: bool = True) -> PlanResult:
+def _make_plan(
+    track: TrackSimple,
+    *,
+    planner_name: str = "test_planner",
+    success: bool = True,
+) -> PlanResult:
     return PlanResult(
         planner_name=planner_name,
         success=success,
@@ -213,7 +223,7 @@ def _make_plan(track: TrackSimple, *, planner_name: str = "test_planner", succes
     )
 
 
-def test_evaluate_plan_perfect_match_has_high_human_likeness(
+def test_evaluate_plan_perfect_match_has_high_v1_scores(
     monkeypatch: pytest.MonkeyPatch,
     layout: Layout,
     scene: Scene,
@@ -237,11 +247,29 @@ def test_evaluate_plan_perfect_match_has_high_human_likeness(
     assert result.human_likeness_score is not None
     assert result.human_likeness_score > 0.99
 
+    assert result.social_compatibility_score is not None
+    assert 0.0 <= result.social_compatibility_score <= 1.0
+
     assert result.task_efficiency_score is not None
     assert result.task_efficiency_score > 0.99
 
     assert result.overall_score is not None
     assert 0.0 <= result.overall_score <= 1.0
+
+    # New explicit goal-completion component lives in metadata in v1.
+    assert result.metadata["goal_completion_score"] is not None
+    assert result.metadata["goal_completion_score"] > 0.99
+    assert result.metadata["goal_distance_m"] == pytest.approx(0.0, abs=1e-9)
+
+    # Cross-flow weighting should be present and sum to 1.
+    weights = result.metadata["weights"]
+    assert set(weights.keys()) == {
+        "goal_completion",
+        "social_compatibility",
+        "task_efficiency",
+        "human_likeness",
+    }
+    assert sum(weights.values()) == pytest.approx(1.0)
 
 
 def test_evaluate_plan_populates_social_metrics_from_other_tracks(
@@ -251,8 +279,6 @@ def test_evaluate_plan_populates_social_metrics_from_other_tracks(
     task: Task,
     robot: Robot,
     target_track: TrackSimple,
-    other_track_a: TrackSimple,
-    other_track_b: TrackSimple,
     store: TrackStore,
 ) -> None:
     monkeypatch.setattr(evaluation_module, "load_track_store", lambda *args, **kwargs: store)
@@ -297,8 +323,45 @@ def test_evaluate_plan_uses_task_robot_start_goal_for_scene_scale(
     plan = _make_plan(target_track)
     result = evaluate_plan(layout, scene, task, robot, plan)
 
-    expected = float(np.hypot(task.robot.goal[0] - task.robot.start[0], task.robot.goal[1] - task.robot.start[1]))
+    expected = float(
+        np.hypot(
+            task.robot.goal[0] - task.robot.start[0],
+            task.robot.goal[1] - task.robot.start[1],
+        )
+    )
     assert result.scene_scale_m == pytest.approx(expected)
+
+
+def test_evaluate_plan_goal_completion_drops_when_robot_misses_goal(
+    monkeypatch: pytest.MonkeyPatch,
+    layout: Layout,
+    scene: Scene,
+    task: Task,
+    robot: Robot,
+    target_track: TrackSimple,
+    store: TrackStore,
+) -> None:
+    monkeypatch.setattr(evaluation_module, "load_track_store", lambda *args, **kwargs: store)
+
+    robot_track = TrackSimple(
+        track_id="robot",
+        timestamps=target_track.timestamps,
+        x=np.array([1.0, 3.0, 5.0, 6.0], dtype=float),
+        y=np.array([8.5, 6.5, 4.0, 3.5], dtype=float),
+        vx=np.array([2.0, 2.0, 1.0, 1.0], dtype=float),
+        vy=np.array([-2.0, -2.5, -0.5, -0.5], dtype=float),
+        position_valid=np.array([True, True, True, True]),
+        velocity_valid=np.array([True, True, True, True]),
+        metadata={},
+    )
+
+    plan = _make_plan(robot_track)
+    result = evaluate_plan(layout, scene, task, robot, plan)
+
+    assert result.metadata["goal_distance_m"] is not None
+    assert result.metadata["goal_distance_m"] > 0.5
+    assert result.metadata["goal_completion_score"] is not None
+    assert result.metadata["goal_completion_score"] < 1.0
 
 
 def test_evaluate_plan_failed_plan_returns_structured_failure(
@@ -345,8 +408,8 @@ def test_evaluate_plan_ignores_invalid_robot_samples(
     robot_track = TrackSimple(
         track_id="robot",
         timestamps=target_track.timestamps,
-        x=np.array([1.0, np.nan, 5.0, 7.0], dtype=float),
-        y=np.array([8.5, np.nan, 4.5, 2.5], dtype=float),
+        x=np.array([1.0, np.nan, 5.5, 8.0], dtype=float),
+        y=np.array([8.5, np.nan, 4.25, 2.0], dtype=float),
         vx=target_track.vx,
         vy=target_track.vy,
         position_valid=np.array([True, False, True, True]),
@@ -361,3 +424,59 @@ def test_evaluate_plan_ignores_invalid_robot_samples(
     assert result.human_likeness_score is not None
     assert result.path_deviation_m is not None
     assert result.path_deviation_m >= 0.0
+
+
+def test_evaluate_plan_scene_type_controls_weighting(
+    monkeypatch: pytest.MonkeyPatch,
+    layout: Layout,
+    robot: Robot,
+    target_track: TrackSimple,
+    store: TrackStore,
+) -> None:
+    monkeypatch.setattr(evaluation_module, "load_track_store", lambda *args, **kwargs: store)
+
+    icn_scene = Scene(
+        scene_id="test.icn.scene",
+        layout=SceneLayoutRef(
+            layout_id="test.layout",
+            path="minimal_layout.json",
+            coordinate_frame="layout_xy_meters",
+        ),
+        tracking=SceneTracking(
+            tracking_id="test.scene",
+            format="csv",
+            path="minimal_tracks.csv",
+            timestamp_field="timestamp",
+            track_id_field="person_track_id",
+            coordinate_frame="layout_xy_meters",
+        ),
+        window=SceneWindow(
+            start="1971-01-01T00:00:00Z",
+            end="1971-01-01T00:00:04Z",
+            duration_s=4.0,
+        ),
+        metadata={},
+        provenance={},
+    )
+
+    icn_task = Task(
+        task_id="test.icn.001",
+        scene=TaskSceneRef(scene_id="test.icn.scene", path="minimal_scene.json"),
+        task_type="icn",
+        robot=TaskRobot(start=(1.0, 8.5), goal=(8.0, 2.0)),
+        target=TaskTargetRef(track_id="t1"),
+        metadata={},
+        provenance={},
+    )
+
+    plan = _make_plan(target_track)
+    result = evaluate_plan(layout, icn_scene, icn_task, robot, plan)
+
+    weights = result.metadata["weights"]
+    assert weights["goal_completion"] == pytest.approx(0.20)
+    assert weights["social_compatibility"] == pytest.approx(0.35)
+    assert weights["task_efficiency"] == pytest.approx(0.15)
+    assert weights["human_likeness"] == pytest.approx(0.30)
+
+
+

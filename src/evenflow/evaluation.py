@@ -52,6 +52,21 @@ def _valid_xy(track: TrackSimple) -> np.ndarray:
     return xy
 
 
+def _valid_txy(track: TrackSimple) -> tuple[np.ndarray, np.ndarray]:
+    t = np.asarray(track.timestamps, dtype=float)
+    xy = np.asarray(track.xy(), dtype=float)
+
+    if track.position_valid is not None:
+        mask = np.asarray(track.position_valid, dtype=bool)
+    else:
+        mask = np.ones(len(t), dtype=bool)
+
+    mask &= np.isfinite(t)
+    mask &= np.isfinite(xy).all(axis=1)
+
+    return t[mask], xy[mask]
+
+
 def _path_length_xy(xy: np.ndarray) -> float:
     if len(xy) <= 1:
         return 0.0
@@ -85,14 +100,14 @@ def _resample_polyline(xy: np.ndarray, n: int) -> np.ndarray:
     targets = np.linspace(0.0, total, n)
     out = np.zeros((n, 2), dtype=float)
     j = 0
-    for i, t in enumerate(targets):
-        while j + 1 < len(s) and s[j + 1] < t:
+    for i, target in enumerate(targets):
+        while j + 1 < len(s) and s[j + 1] < target:
             j += 1
         if j + 1 >= len(s):
             out[i] = xy[-1]
             continue
         denom = s[j + 1] - s[j]
-        alpha = 0.0 if denom <= 1e-9 else (t - s[j]) / denom
+        alpha = 0.0 if denom <= 1e-9 else (target - s[j]) / denom
         out[i] = (1.0 - alpha) * xy[j] + alpha * xy[j + 1]
     return out
 
@@ -104,7 +119,10 @@ def _pairwise_distances(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     return np.linalg.norm(diff, axis=2)
 
 
-def _compute_min_distance_between_tracks(robot_track: TrackSimple, human_track: TrackSimple) -> float | None:
+def _compute_min_distance_between_tracks(
+    robot_track: TrackSimple,
+    human_track: TrackSimple,
+) -> float | None:
     robot_xy = _valid_xy(robot_track)
     human_xy = _valid_xy(human_track)
     if len(robot_xy) == 0 or len(human_xy) == 0:
@@ -142,7 +160,40 @@ def _scene_scale_m(layout: Layout, task: Task, human_xy: np.ndarray) -> float:
     return 10.0
 
 
-def _human_likeness_metrics(robot_xy: np.ndarray, human_xy: np.ndarray, *, scene_scale_m: float) -> dict[str, float | None]:
+def _goal_completion_metrics(
+    robot_xy: np.ndarray,
+    task: Task,
+    *,
+    robot_radius_m: float,
+    plan_success: bool,
+) -> dict[str, float | None]:
+    if len(robot_xy) == 0:
+        return {
+            "goal_distance_m": None,
+            "goal_completion_score": 0.0 if not plan_success else None,
+        }
+
+    goal = np.asarray(task.robot.goal, dtype=float)
+    goal_dist = float(np.linalg.norm(robot_xy[-1] - goal))
+    # generous completion radius for v1
+    goal_tol = max(0.5, 2.0 * robot_radius_m)
+    goal_score = _clip01(1.0 - goal_dist / goal_tol)
+
+    if not plan_success:
+        goal_score = 0.0
+
+    return {
+        "goal_distance_m": goal_dist,
+        "goal_completion_score": goal_score,
+    }
+
+
+def _human_likeness_metrics(
+    robot_xy: np.ndarray,
+    human_xy: np.ndarray,
+    *,
+    scene_scale_m: float,
+) -> dict[str, float | None]:
     if len(robot_xy) == 0 or len(human_xy) == 0:
         return {
             "path_deviation_m": None,
@@ -170,7 +221,9 @@ def _human_likeness_metrics(robot_xy: np.ndarray, human_xy: np.ndarray, *, scene
     path_score = _clip01(1.0 - path_dev / max(scene_scale_m, 1e-6))
     lateral_score = _clip01(1.0 - (lateral_dev or 0.0) / max(scene_scale_m, 1e-6))
     dir_score = 0.5 if direction_similarity is None else _clip01(direction_similarity)
-    hls = float(0.45 * path_score + 0.35 * lateral_score + 0.20 * dir_score)
+
+    # v1 behavioral alignment: emphasize route/shape agreement over exact replay
+    hls = float(0.50 * path_score + 0.30 * lateral_score + 0.20 * dir_score)
 
     return {
         "path_deviation_m": path_dev,
@@ -184,7 +237,10 @@ def _get_other_human_tracks(store, target_track_id: str) -> list[TrackSimple]:
     return [store.get_track_simple(tid) for tid in store.iter_track_ids() if tid != target_track_id]
 
 
-def _compute_clearance_to_other_humans(robot_xy: np.ndarray, other_human_tracks: list[TrackSimple]) -> tuple[float | None, float | None]:
+def _compute_clearance_to_other_humans(
+    robot_xy: np.ndarray,
+    other_human_tracks: list[TrackSimple],
+) -> tuple[float | None, float | None]:
     if len(robot_xy) == 0 or not other_human_tracks:
         return None, None
 
@@ -246,11 +302,17 @@ def _social_compatibility_metrics(
             "social_compatibility_score": None,
         }
 
-    other_human_xys = [_valid_xy(ht) for ht in other_human_tracks if len(_valid_xy(ht))]
+    other_human_xys = []
+    for ht in other_human_tracks:
+        hxy = _valid_xy(ht)
+        if len(hxy):
+            other_human_xys.append(hxy)
+
     min_clearance, mean_clearance = _compute_clearance_to_other_humans(robot_xy, other_human_tracks)
 
     axis, coherence = _local_flow_axis(([target_human_xy] if len(target_human_xy) else []) + other_human_xys)
     robot_dirs = _step_dirs(robot_xy)
+
     flow_alignment = None
     if axis is not None and len(robot_dirs):
         dots = np.abs(robot_dirs @ axis)
@@ -273,7 +335,12 @@ def _social_compatibility_metrics(
     clearance_score = 0.5 if min_clearance is None else _clip01(min_clearance / max(comfort_radius_m, 1e-6))
     align_score = 0.5 if flow_alignment is None else _clip01(flow_alignment)
     disruption_penalty = 0.5 if disruption_rate is None else _clip01(disruption_rate)
-    scs = float(0.45 * clearance_score + 0.35 * align_score + 0.20 * (1.0 - disruption_penalty))
+
+    scs = float(
+        0.50 * clearance_score
+        + 0.25 * align_score
+        + 0.25 * (1.0 - disruption_penalty)
+    )
 
     return {
         "min_other_human_distance_m": min_clearance,
@@ -285,7 +352,12 @@ def _social_compatibility_metrics(
     }
 
 
-def _task_efficiency_metrics(robot_xy: np.ndarray, human_xy: np.ndarray, *, plan_success: bool) -> dict[str, float | None]:
+def _task_efficiency_metrics(
+    robot_xy: np.ndarray,
+    human_xy: np.ndarray,
+    *,
+    plan_success: bool,
+) -> dict[str, float | None]:
     if len(robot_xy) == 0 or len(human_xy) == 0:
         return {
             "robot_path_length_m": None,
@@ -306,7 +378,8 @@ def _task_efficiency_metrics(robot_xy: np.ndarray, human_xy: np.ndarray, *, plan
     path_score = 0.5 if path_ratio is None else _clip01(path_ratio)
     dur_score = _clip01(duration_ratio)
     success_score = 1.0 if plan_success else 0.0
-    tes = float(0.50 * path_score + 0.20 * dur_score + 0.30 * success_score)
+
+    tes = float(0.55 * path_score + 0.15 * dur_score + 0.30 * success_score)
 
     return {
         "robot_path_length_m": robot_len,
@@ -355,6 +428,16 @@ def evaluate_plan(
     *,
     scene_json_path: str | Path | None = None,
 ) -> EvalResult:
+    """
+    EvenFlow evaluation v1.
+
+    Metric families:
+      1. Goal completion
+      2. Social safety / human clearance
+      3. Efficiency
+      4. Behavioral alignment to reference human
+    """
+
     scene_type = _infer_scene_type(scene, task)
 
     try:
@@ -376,39 +459,58 @@ def evaluate_plan(
             raise ValueError("Human target track has no valid samples")
 
         other_human_tracks = _get_other_human_tracks(store, task.target.track_id)
-        path_length_m = plan.path_length_m if plan.path_length_m is not None else robot_track.path_length_m()
+
+        path_length_m = (
+            plan.path_length_m if plan.path_length_m is not None else robot_track.path_length_m()
+        )
         min_human_distance_m = _compute_min_distance_between_tracks(robot_track, human_track)
+
         scene_scale_m = _scene_scale_m(layout, task, human_xy)
         robot_radius_m = float(getattr(robot, "radius_m", 0.3) or 0.3)
         comfort_radius_m = max(0.8, 2.0 * robot_radius_m)
 
+        goal_metrics = _goal_completion_metrics(
+            robot_xy,
+            task,
+            robot_radius_m=robot_radius_m,
+            plan_success=bool(plan.success),
+        )
         hls = _human_likeness_metrics(robot_xy, human_xy, scene_scale_m=scene_scale_m)
-        scs = _social_compatibility_metrics(robot_xy, human_xy, other_human_tracks, comfort_radius_m=comfort_radius_m)
+        scs = _social_compatibility_metrics(
+            robot_xy,
+            human_xy,
+            other_human_tracks,
+            comfort_radius_m=comfort_radius_m,
+        )
         tes = _task_efficiency_metrics(robot_xy, human_xy, plan_success=bool(plan.success))
         react = _react_metrics(robot_xy, human_xy)
 
+        # Scene-type-specific aggregation.
+        # These weights reflect regime semantics from the technical note:
+        # aligned-flow emphasizes behavioral consistency with ambient motion,
+        # cross-flow balances structure and social coordination,
+        # ICN emphasizes social compatibility / negotiation.
         weights = {
-            "aligned_flow": (0.55, 0.25, 0.20),
-            "cross_flow": (0.40, 0.35, 0.25),
-            "icn": (0.30, 0.50, 0.20),
-            "generic": (0.45, 0.35, 0.20),
-            None: (0.45, 0.35, 0.20),
+            "aligned_flow": (0.25, 0.20, 0.20, 0.35),  # goal, safety, efficiency, behavior
+            "cross_flow": (0.25, 0.25, 0.20, 0.30),
+            "icn": (0.20, 0.35, 0.15, 0.30),
+            "generic": (0.25, 0.25, 0.20, 0.30),
+            None: (0.25, 0.25, 0.20, 0.30),
         }
-        wh, ws, wt = weights.get(scene_type, weights["generic"])
+        wg, ws, we, wb = weights.get(scene_type, weights["generic"])
 
         overall_score = None
-        if all(
-            metrics.get(key) is not None
-            for metrics, key in (
-                (hls, "human_likeness_score"),
-                (scs, "social_compatibility_score"),
-                (tes, "task_efficiency_score"),
-            )
+        if (
+            goal_metrics["goal_completion_score"] is not None
+            and scs["social_compatibility_score"] is not None
+            and tes["task_efficiency_score"] is not None
+            and hls["human_likeness_score"] is not None
         ):
             overall_score = float(
-                wh * float(hls["human_likeness_score"])
+                wg * float(goal_metrics["goal_completion_score"])
                 + ws * float(scs["social_compatibility_score"])
-                + wt * float(tes["task_efficiency_score"])
+                + we * float(tes["task_efficiency_score"])
+                + wb * float(hls["human_likeness_score"])
             )
 
         return EvalResult(
@@ -443,9 +545,17 @@ def evaluate_plan(
             react_proxy_gap=react["react_proxy_gap"],
             n_other_human_tracks=len(other_human_tracks),
             metadata={
+                "goal_completion_score": goal_metrics["goal_completion_score"],
+                "goal_distance_m": goal_metrics["goal_distance_m"],
                 "hls": hls.get("human_likeness_score"),
                 "scs": scs.get("social_compatibility_score"),
                 "tes": tes.get("task_efficiency_score"),
+                "weights": {
+                    "goal_completion": wg,
+                    "social_compatibility": ws,
+                    "task_efficiency": we,
+                    "human_likeness": wb,
+                },
             },
         )
 

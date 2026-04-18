@@ -71,6 +71,13 @@ def _optional_float(row: dict[str, Any], field: str) -> float | None:
     return float(value)
 
 
+def _required_float_or_nan(row, field):
+    value = row.get(field)
+    if value is None or value == "":
+        return np.nan
+    return float(value)
+
+
 def _optional_bool(row: dict[str, Any], field: str) -> bool | None:
     if field not in row:
         return None
@@ -405,8 +412,8 @@ def load_track_store(
         for row in reader:
             timestamp_datetimes.append(_parse_timestamp_iso(row[timestamp_field]))
             track_ids.append(str(row[track_id_field]))
-            xs.append(float(row["x"]))
-            ys.append(float(row["y"]))
+            xs.append(_required_float_or_nan(row, "x"))
+            ys.append(_required_float_or_nan(row, "y"))
 
             vxs.append(_optional_float(row, "vx") if has_vx else None)
             vys.append(_optional_float(row, "vy") if has_vy else None)
