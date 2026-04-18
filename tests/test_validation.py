@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from evenflow.io import load_layout
 from evenflow.models import (
     Layout,
     PlanResult,
-    PlanWaypoint,
     Robot,
     Scene,
     SceneFlow,
@@ -18,6 +18,7 @@ from evenflow.models import (
     Task,
     TaskRobot,
     TaskSceneRef,
+    TrackSimple,
 )
 from evenflow.validation import (
     ValidationError,
@@ -158,14 +159,21 @@ def test_validate_robot_requires_positive_radius() -> None:
 
 
 def test_validate_plan_result_accepts_valid_plan() -> None:
+    track = TrackSimple(
+        track_id="robot_plan",
+        timestamps=np.array([0.0, 1.0, 2.0], dtype=float),
+        x=np.array([1.0, 8.5, 8.5], dtype=float),
+        y=np.array([8.5, 8.5, 2.0], dtype=float),
+        vx=np.array([1.2, 0.0, 0.0], dtype=float),
+        vy=np.array([0.0, -1.2, -1.2], dtype=float),
+        position_valid=np.array([True, True, True], dtype=bool),
+        velocity_valid=np.array([True, True, True], dtype=bool),
+    )
+
     plan = PlanResult(
         planner_name="geometry",
         success=True,
-        waypoints=(
-            PlanWaypoint(x=1.0, y=8.5),
-            PlanWaypoint(x=8.5, y=8.5),
-            PlanWaypoint(x=8.5, y=2.0),
-        ),
+        track=track,
         path_length_m=14.0,
         runtime_s=0.01,
         message="ok",
@@ -178,11 +186,28 @@ def test_validate_plan_result_rejects_successful_empty_plan() -> None:
     plan = PlanResult(
         planner_name="geometry",
         success=True,
-        waypoints=(),
+        track=None,
     )
 
     with pytest.raises(
         ValidationError,
-        match="successful plans must contain at least 2 waypoints",
+        match="successful plans must contain a track trajectory",
     ):
         validate_plan_result(plan)
+
+
+def test_validate_plan_result_accepts_track_only_plan() -> None:
+    track = TrackSimple(
+        track_id="robot_plan",
+        timestamps=np.array([0.0, 1.0], dtype=float),
+        x=np.array([0.0, 1.0], dtype=float),
+        y=np.array([0.0, 1.0], dtype=float),
+    )
+
+    plan = PlanResult(
+        planner_name="geometry",
+        success=True,
+        track=track,
+    )
+
+    validate_plan_result(plan)

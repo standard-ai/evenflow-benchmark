@@ -20,13 +20,14 @@ def test_geometry_planner_returns_successful_plan() -> None:
 
     assert result.planner_name == "geometry"
     assert result.success is True
-    assert len(result.waypoints) >= 2
-    assert result.waypoints[0].x == task.robot.start[0]
-    assert result.waypoints[0].y == task.robot.start[1]
-    assert result.waypoints[-1].x == task.robot.goal[0]
-    assert result.waypoints[-1].y == task.robot.goal[1]
     assert result.path_length_m is not None
     assert result.path_length_m > 0.0
+    assert result.track is not None
+    assert result.track.num_samples() >= 2
+    assert result.track.x[0] == task.robot.start[0]
+    assert result.track.y[0] == task.robot.start[1]
+    assert result.track.x[-1] == task.robot.goal[0]
+    assert result.track.y[-1] == task.robot.goal[1]
     assert result.runtime_s is not None
 
 
@@ -51,4 +52,4 @@ def test_geometry_planner_can_fail_for_impossible_goal() -> None:
     result = planner.plan(layout, scene, bad_task, robot)
 
     assert result.success is False
-    assert result.waypoints == ()
+    assert result.track is None

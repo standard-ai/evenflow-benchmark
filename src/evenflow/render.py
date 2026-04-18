@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 import math
 from pathlib import Path
 
@@ -10,6 +9,7 @@ from matplotlib.figure import Figure
 from matplotlib.patches import Polygon as MplPolygon
 
 from .geometry import bounds, centroid
+from .io import load_track_store
 from .models import Layout, PlanResult, Scene, Task
 
 
@@ -93,47 +93,36 @@ def _legend_outside(ax: Axes) -> None:
         )
 
 
-def _scene_tracking_csv_path(scene_json_path: str | Path, tracking_rel_path: str) -> Path:
-    return Path(scene_json_path).resolve().parent / tracking_rel_path
-
-
 def draw_scene_tracks(
     ax: Axes,
     scene: Scene,
     *,
     scene_json_path: str | Path,
-    x_field: str = "bkg_x",
-    y_field: str = "bkg_y",
     max_tracks: int | None = None,
     alpha: float = 0.45,
     linewidth: float = 1.0,
 ) -> None:
-    if scene.tracking.format.lower() != "csv":
-        raise ValueError(f"Unsupported tracking format: {scene.tracking.format}")
+    store = load_track_store(scene, scene_json_path=scene_json_path)
 
-    csv_path = _scene_tracking_csv_path(scene_json_path, scene.tracking.path)
-
-    tracks: dict[str, list[tuple[float, float]]] = {}
-    with csv_path.open(newline="") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            track_id = row[scene.tracking.track_id_field]
-            try:
-                x = float(row[x_field])
-                y = float(row[y_field])
-            except (KeyError, TypeError, ValueError):
-                continue
-            tracks.setdefault(track_id, []).append((x, y))
-
-    track_items = list(tracks.items())
+    track_iter = store.iter_simple_tracks()
     if max_tracks is not None:
-        track_items = track_items[:max_tracks]
+        track_iter = list(track_iter)[:max_tracks]
 
-    for i, (_, pts) in enumerate(track_items):
-        if len(pts) < 2:
+    for i, track in enumerate(track_iter):
+        if track.num_samples() < 2:
             continue
-        xs = [p[0] for p in pts]
-        ys = [p[1] for p in pts]
+
+        if track.position_valid is not None:
+            mask = track.position_valid
+            xs = track.x[mask]
+            ys = track.y[mask]
+        else:
+            xs = track.x
+            ys = track.y
+
+        if len(xs) < 2:
+            continue
+
         label = "tracks" if i == 0 else None
         ax.plot(xs, ys, alpha=alpha, linewidth=linewidth, zorder=2, label=label)
 
@@ -252,15 +241,23 @@ def draw_plan(
     plan: PlanResult,
     *,
     annotate: bool = False,
-    show_waypoints: bool = False,
+    show_samples: bool = False,
     linewidth: float = 3.0,
     alpha: float = 0.95,
 ) -> None:
-    if not plan.success or not plan.waypoints:
+    if not plan.success or plan.track is None:
         return
 
-    xs = [wp.x for wp in plan.waypoints]
-    ys = [wp.y for wp in plan.waypoints]
+    if plan.track.position_valid is not None:
+        mask = plan.track.position_valid
+        xs = plan.track.x[mask].tolist()
+        ys = plan.track.y[mask].tolist()
+    else:
+        xs = plan.track.x.tolist()
+        ys = plan.track.y.tolist()
+
+    if len(xs) < 2:
+        return
 
     ax.plot(
         xs,
@@ -273,7 +270,7 @@ def draw_plan(
         label=f"plan:{plan.planner_name}",
     )
 
-    if show_waypoints:
+    if show_samples:
         ax.plot(
             xs,
             ys,
@@ -282,7 +279,7 @@ def draw_plan(
             markersize=5,
             alpha=alpha,
             zorder=11,
-            label="plan-waypoints",
+            label="plan-samples",
         )
 
     if annotate:
@@ -304,8 +301,6 @@ def save_scene_figure(
     *,
     scene_json_path: str | Path | None = None,
     show_tracks: bool = False,
-    tracks_x_field: str = "bkg_x",
-    tracks_y_field: str = "bkg_y",
     max_tracks: int | None = None,
     show_obstacle_labels: bool = True,
     show_exit_labels: bool = True,
@@ -329,8 +324,6 @@ def save_scene_figure(
             ax,
             scene,
             scene_json_path=scene_json_path,
-            x_field=tracks_x_field,
-            y_field=tracks_y_field,
             max_tracks=max_tracks,
         )
 
@@ -386,8 +379,6 @@ def save_scene_task_figure(
     *,
     scene_json_path: str | Path | None = None,
     show_tracks: bool = False,
-    tracks_x_field: str = "bkg_x",
-    tracks_y_field: str = "bkg_y",
     max_tracks: int | None = None,
     show_obstacle_labels: bool = True,
     show_exit_labels: bool = True,
@@ -413,8 +404,6 @@ def save_scene_task_figure(
             ax,
             scene,
             scene_json_path=scene_json_path,
-            x_field=tracks_x_field,
-            y_field=tracks_y_field,
             max_tracks=max_tracks,
         )
 
@@ -447,7 +436,7 @@ def save_plan_figure(
     show_obstacle_labels: bool = True,
     show_exit_labels: bool = True,
     annotate_plan: bool = True,
-    show_waypoints: bool = False,
+    show_samples: bool = False,
     title: str | None = None,
 ) -> None:
     fig, ax = render_layout(
@@ -460,7 +449,7 @@ def save_plan_figure(
         ax,
         plan,
         annotate=annotate_plan,
-        show_waypoints=show_waypoints,
+        show_samples=show_samples,
     )
     _legend_outside(ax)
     fig.tight_layout()
@@ -477,8 +466,6 @@ def save_scene_task_plan_figure(
     *,
     scene_json_path: str | Path | None = None,
     show_tracks: bool = False,
-    tracks_x_field: str = "bkg_x",
-    tracks_y_field: str = "bkg_y",
     max_tracks: int | None = None,
     show_obstacle_labels: bool = True,
     show_exit_labels: bool = True,
@@ -489,7 +476,7 @@ def save_scene_task_plan_figure(
     show_u_hat: bool = True,
     u_hat_scale: float = 1.0,
     show_straight_line: bool = True,
-    show_waypoints: bool = False,
+    show_samples: bool = False,
     title: str | None = None,
 ) -> None:
     fig, ax = render_layout(
@@ -506,8 +493,6 @@ def save_scene_task_plan_figure(
             ax,
             scene,
             scene_json_path=scene_json_path,
-            x_field=tracks_x_field,
-            y_field=tracks_y_field,
             max_tracks=max_tracks,
         )
 
@@ -529,7 +514,7 @@ def save_scene_task_plan_figure(
         ax,
         plan,
         annotate=annotate_plan,
-        show_waypoints=show_waypoints,
+        show_samples=show_samples,
     )
 
     _legend_outside(ax)

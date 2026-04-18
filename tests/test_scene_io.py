@@ -10,6 +10,6 @@ def test_load_scene_reads_basic_fields() -> None:
 
     assert scene.scene_id == "test.simple"
     assert scene.layout.layout_id == "test.minimal_layout"
-    assert scene.layout.path == "../fixtures/minimal_layout.json"
+    assert scene.layout.path == "minimal_layout.json"
     assert scene.window.duration_s == 10.0
     assert scene.flow.p_star == (5.0, 5.0)

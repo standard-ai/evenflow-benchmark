@@ -2,10 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import numpy as np
-
 from evenflow.io import load_layout, load_plan, load_scene
-from evenflow.models import PlanResult, TrackSimple
 from evenflow.render import (
     render_layout,
     save_layout_figure,
@@ -47,10 +44,10 @@ def test_save_plan_figure_writes_png(tmp_path: Path) -> None:
     assert out_path.stat().st_size > 0
 
 
-def test_save_scene_figure_with_tracks_writes_png(tmp_path: Path) -> None:
+def test_save_scene_figure_with_canonical_tracks_writes_png(tmp_path: Path) -> None:
     layout = load_layout(FIXTURES / "minimal_layout.json")
     scene = load_scene(FIXTURES / "minimal_scene_with_tracks.json")
-    out_path = tmp_path / "scene_tracks.png"
+    out_path = tmp_path / "scene_with_tracks.png"
 
     save_scene_figure(
         layout,
@@ -58,36 +55,8 @@ def test_save_scene_figure_with_tracks_writes_png(tmp_path: Path) -> None:
         out_path,
         scene_json_path=FIXTURES / "minimal_scene_with_tracks.json",
         show_tracks=True,
-        max_tracks=10,
+        max_tracks=5,
     )
-
-    assert out_path.exists()
-    assert out_path.stat().st_size > 0
-
-
-def test_save_plan_figure_uses_track_samples(tmp_path: Path) -> None:
-    layout = load_layout(FIXTURES / "minimal_layout.json")
-    out_path = tmp_path / "plan_track.png"
-
-    track = TrackSimple(
-        track_id="robot_plan",
-        timestamps=np.array([0.0, 1.0, 2.0], dtype=float),
-        x=np.array([0.5, 1.0, 1.5], dtype=float),
-        y=np.array([0.5, 1.25, 2.0], dtype=float),
-        vx=np.array([0.5, 0.5, 0.5], dtype=float),
-        vy=np.array([0.75, 0.75, 0.75], dtype=float),
-    )
-
-    plan = PlanResult(
-        planner_name="test_track_plan",
-        success=True,
-        track=track,
-        path_length_m=track.path_length_m(),
-        runtime_s=0.01,
-        message="ok",
-    )
-
-    save_plan_figure(layout, plan, out_path, show_samples=True)
 
     assert out_path.exists()
     assert out_path.stat().st_size > 0

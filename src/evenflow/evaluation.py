@@ -1,74 +1,349 @@
 from __future__ import annotations
 
-import csv
-import math
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
-from .models import Layout, PlanResult, Robot, Scene, Task, EvalResult
+import numpy as np
 
-
-def _scene_tracking_csv_path(
-    scene: Scene,
-    *,
-    scene_json_path: str | Path | None = None,
-) -> Path:
-    tracking_path = Path(scene.tracking.path)
-
-    if tracking_path.is_absolute():
-        return tracking_path
-
-    if scene_json_path is not None:
-        return Path(scene_json_path).resolve().parent / tracking_path
-
-    return tracking_path
+from .io import load_track_store
+from .models import EvalResult, Layout, PlanResult, Robot, Scene, Task, TrackSimple
 
 
-def _load_human_points(
-    scene: Scene,
-    *,
-    scene_json_path: str | Path | None = None,
-    x_field: str = "bkg_x",
-    y_field: str = "bkg_y",
-) -> list[tuple[float, float]]:
-    if scene.tracking.format.lower() != "csv":
-        raise ValueError(f"Unsupported tracking format: {scene.tracking.format}")
-
-    csv_path = _scene_tracking_csv_path(scene, scene_json_path=scene_json_path)
-
-    points: list[tuple[float, float]] = []
-    with csv_path.open(newline="") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            try:
-                x = float(row[x_field])
-                y = float(row[y_field])
-            except (KeyError, TypeError, ValueError):
-                continue
-            points.append((x, y))
-
-    return points
+def _clip01(x: float) -> float:
+    return float(max(0.0, min(1.0, x)))
 
 
-def _compute_min_human_distance_m(
-    plan: PlanResult,
-    human_points: list[tuple[float, float]],
-) -> float | None:
-    if not plan.success or not plan.waypoints:
+def _infer_scene_type(scene: Scene, task: Task) -> str | None:
+    candidates: list[str] = []
+    for value in (
+        getattr(scene, "scene_id", None),
+        getattr(task, "task_type", None),
+        getattr(scene, "metadata", {}).get("scene_type"),
+        getattr(task, "metadata", {}).get("scene_type"),
+    ):
+        if value is not None:
+            candidates.append(str(value).lower())
+
+    joined = " ".join(candidates)
+    if "aligned" in joined:
+        return "aligned_flow"
+    if "cross" in joined:
+        return "cross_flow"
+    if "icn" in joined or "corridor" in joined or "interaction" in joined:
+        return "icn"
+    if joined:
+        return "generic"
+    return None
+
+
+def _get_robot_track(plan: PlanResult) -> TrackSimple | None:
+    if not plan.success:
         return None
+    return plan.track
 
-    if not human_points:
+
+def _valid_xy(track: TrackSimple) -> np.ndarray:
+    xy = np.asarray(track.xy(), dtype=float)
+    if track.position_valid is not None:
+        xy = xy[np.asarray(track.position_valid, dtype=bool)]
+    finite = np.isfinite(xy).all(axis=1)
+    xy = xy[finite]
+    if xy.ndim != 2 or xy.shape[1] != 2:
+        raise ValueError(f"Expected xy to have shape (T, 2), got {xy.shape}")
+    return xy
+
+
+def _path_length_xy(xy: np.ndarray) -> float:
+    if len(xy) <= 1:
+        return 0.0
+    dxy = np.diff(xy, axis=0)
+    return float(np.sum(np.linalg.norm(dxy, axis=1)))
+
+
+def _step_dirs(xy: np.ndarray) -> np.ndarray:
+    if len(xy) <= 1:
+        return np.zeros((0, 2), dtype=float)
+    dxy = np.diff(xy, axis=0)
+    step_norms = np.linalg.norm(dxy, axis=1)
+    mask = step_norms > 1e-9
+    if not np.any(mask):
+        return np.zeros((0, 2), dtype=float)
+    return dxy[mask] / step_norms[mask][:, None]
+
+
+def _resample_polyline(xy: np.ndarray, n: int) -> np.ndarray:
+    if len(xy) == 0:
+        return np.zeros((0, 2), dtype=float)
+    if len(xy) == 1:
+        return np.repeat(xy, n, axis=0)
+
+    seg = np.linalg.norm(np.diff(xy, axis=0), axis=1)
+    s = np.concatenate([[0.0], np.cumsum(seg)])
+    total = float(s[-1])
+    if total <= 1e-9:
+        return np.repeat(xy[:1], n, axis=0)
+
+    targets = np.linspace(0.0, total, n)
+    out = np.zeros((n, 2), dtype=float)
+    j = 0
+    for i, t in enumerate(targets):
+        while j + 1 < len(s) and s[j + 1] < t:
+            j += 1
+        if j + 1 >= len(s):
+            out[i] = xy[-1]
+            continue
+        denom = s[j + 1] - s[j]
+        alpha = 0.0 if denom <= 1e-9 else (t - s[j]) / denom
+        out[i] = (1.0 - alpha) * xy[j] + alpha * xy[j + 1]
+    return out
+
+
+def _pairwise_distances(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    if len(a) == 0 or len(b) == 0:
+        return np.zeros((len(a), len(b)), dtype=float)
+    diff = a[:, None, :] - b[None, :, :]
+    return np.linalg.norm(diff, axis=2)
+
+
+def _compute_min_distance_between_tracks(robot_track: TrackSimple, human_track: TrackSimple) -> float | None:
+    robot_xy = _valid_xy(robot_track)
+    human_xy = _valid_xy(human_track)
+    if len(robot_xy) == 0 or len(human_xy) == 0:
         return None
+    d = _pairwise_distances(robot_xy, human_xy)
+    return float(np.min(d)) if d.size else None
 
-    best = float("inf")
-    for wp in plan.waypoints:
-        for hx, hy in human_points:
-            d = math.hypot(wp.x - hx, wp.y - hy)
-            if d < best:
-                best = d
 
-    return best if best != float("inf") else None
+def _scene_scale_m(layout: Layout, task: Task, human_xy: np.ndarray) -> float:
+    try:
+        start = np.asarray(task.robot.start, dtype=float)
+        goal = np.asarray(task.robot.goal, dtype=float)
+        if start.shape == (2,) and goal.shape == (2,):
+            sg = float(np.linalg.norm(goal - start))
+            if sg > 1e-6:
+                return sg
+    except Exception:
+        pass
+
+    hp = _path_length_xy(human_xy)
+    if hp > 1e-6:
+        return hp
+
+    try:
+        boundary = np.asarray(layout.boundary, dtype=float)
+        if boundary.ndim == 2 and boundary.shape[1] >= 2 and len(boundary) >= 2:
+            mins = np.min(boundary[:, :2], axis=0)
+            maxs = np.max(boundary[:, :2], axis=0)
+            diag = float(np.linalg.norm(maxs - mins))
+            if diag > 1e-6:
+                return diag
+    except Exception:
+        pass
+
+    return 10.0
+
+
+def _human_likeness_metrics(robot_xy: np.ndarray, human_xy: np.ndarray, *, scene_scale_m: float) -> dict[str, float | None]:
+    if len(robot_xy) == 0 or len(human_xy) == 0:
+        return {
+            "path_deviation_m": None,
+            "lateral_deviation_m": None,
+            "direction_similarity": None,
+            "human_likeness_score": None,
+        }
+
+    n = max(32, min(128, max(len(robot_xy), len(human_xy))))
+    r_rs = _resample_polyline(robot_xy, n)
+    h_rs = _resample_polyline(human_xy, n)
+
+    path_dev = float(np.mean(np.linalg.norm(r_rs - h_rs, axis=1)))
+    d = _pairwise_distances(robot_xy, human_xy)
+    lateral_dev = float(np.mean(np.min(d, axis=1))) if d.size else None
+
+    r_dirs = _step_dirs(r_rs)
+    h_dirs = _step_dirs(h_rs)
+    direction_similarity = None
+    if len(r_dirs) > 0 and len(h_dirs) > 0:
+        m = min(len(r_dirs), len(h_dirs))
+        dots = np.sum(r_dirs[:m] * h_dirs[:m], axis=1)
+        direction_similarity = float(np.mean((dots + 1.0) / 2.0))
+
+    path_score = _clip01(1.0 - path_dev / max(scene_scale_m, 1e-6))
+    lateral_score = _clip01(1.0 - (lateral_dev or 0.0) / max(scene_scale_m, 1e-6))
+    dir_score = 0.5 if direction_similarity is None else _clip01(direction_similarity)
+    hls = float(0.45 * path_score + 0.35 * lateral_score + 0.20 * dir_score)
+
+    return {
+        "path_deviation_m": path_dev,
+        "lateral_deviation_m": lateral_dev,
+        "direction_similarity": direction_similarity,
+        "human_likeness_score": hls,
+    }
+
+
+def _get_other_human_tracks(store, target_track_id: str) -> list[TrackSimple]:
+    return [store.get_track_simple(tid) for tid in store.iter_track_ids() if tid != target_track_id]
+
+
+def _compute_clearance_to_other_humans(robot_xy: np.ndarray, other_human_tracks: list[TrackSimple]) -> tuple[float | None, float | None]:
+    if len(robot_xy) == 0 or not other_human_tracks:
+        return None, None
+
+    per_track_min: list[float] = []
+    for ht in other_human_tracks:
+        hxy = _valid_xy(ht)
+        if len(hxy) == 0:
+            continue
+        d = _pairwise_distances(robot_xy, hxy)
+        if d.size:
+            per_track_min.append(float(np.min(d)))
+
+    if not per_track_min:
+        return None, None
+    return float(np.min(per_track_min)), float(np.mean(per_track_min))
+
+
+def _local_flow_axis(humans_xy: list[np.ndarray]) -> tuple[np.ndarray | None, float | None]:
+    dirs: list[np.ndarray] = []
+    for xy in humans_xy:
+        step_dirs = _step_dirs(xy)
+        if len(step_dirs):
+            dirs.extend(step_dirs)
+
+    if len(dirs) < 2:
+        return None, None
+
+    arr = np.asarray(dirs, dtype=float)
+    cov = arr.T @ arr
+    evals, evecs = np.linalg.eigh(cov)
+    order = np.argsort(evals)[::-1]
+    evals = evals[order]
+    evecs = evecs[:, order]
+
+    denom = float(evals[0] + evals[1]) if len(evals) >= 2 else 0.0
+    if denom <= 1e-12:
+        return None, None
+
+    axis = evecs[:, 0]
+    axis = axis / max(np.linalg.norm(axis), 1e-12)
+    coherence = float((evals[0] - evals[1]) / denom)
+    return axis, _clip01(coherence)
+
+
+def _social_compatibility_metrics(
+    robot_xy: np.ndarray,
+    target_human_xy: np.ndarray,
+    other_human_tracks: list[TrackSimple],
+    *,
+    comfort_radius_m: float,
+) -> dict[str, float | None]:
+    if len(robot_xy) == 0:
+        return {
+            "min_other_human_distance_m": None,
+            "mean_other_human_min_distance_m": None,
+            "flow_axis_alignment": None,
+            "flow_coherence": None,
+            "disruption_rate": None,
+            "social_compatibility_score": None,
+        }
+
+    other_human_xys = [_valid_xy(ht) for ht in other_human_tracks if len(_valid_xy(ht))]
+    min_clearance, mean_clearance = _compute_clearance_to_other_humans(robot_xy, other_human_tracks)
+
+    axis, coherence = _local_flow_axis(([target_human_xy] if len(target_human_xy) else []) + other_human_xys)
+    robot_dirs = _step_dirs(robot_xy)
+    flow_alignment = None
+    if axis is not None and len(robot_dirs):
+        dots = np.abs(robot_dirs @ axis)
+        flow_alignment = float(np.mean(dots))
+
+    disruption_rate = None
+    if other_human_xys:
+        close_flags = []
+        for pt in robot_xy:
+            d_min = float("inf")
+            for hxy in other_human_xys:
+                d = np.linalg.norm(hxy - pt[None, :], axis=1)
+                if len(d):
+                    d_min = min(d_min, float(np.min(d)))
+            if d_min != float("inf"):
+                close_flags.append(1.0 if d_min < comfort_radius_m else 0.0)
+        if close_flags:
+            disruption_rate = float(np.mean(close_flags))
+
+    clearance_score = 0.5 if min_clearance is None else _clip01(min_clearance / max(comfort_radius_m, 1e-6))
+    align_score = 0.5 if flow_alignment is None else _clip01(flow_alignment)
+    disruption_penalty = 0.5 if disruption_rate is None else _clip01(disruption_rate)
+    scs = float(0.45 * clearance_score + 0.35 * align_score + 0.20 * (1.0 - disruption_penalty))
+
+    return {
+        "min_other_human_distance_m": min_clearance,
+        "mean_other_human_min_distance_m": mean_clearance,
+        "flow_axis_alignment": flow_alignment,
+        "flow_coherence": coherence,
+        "disruption_rate": disruption_rate,
+        "social_compatibility_score": scs,
+    }
+
+
+def _task_efficiency_metrics(robot_xy: np.ndarray, human_xy: np.ndarray, *, plan_success: bool) -> dict[str, float | None]:
+    if len(robot_xy) == 0 or len(human_xy) == 0:
+        return {
+            "robot_path_length_m": None,
+            "human_path_length_m": None,
+            "path_efficiency_ratio": None,
+            "duration_ratio": None,
+            "task_efficiency_score": 0.0 if not plan_success else None,
+        }
+
+    robot_len = _path_length_xy(robot_xy)
+    human_len = _path_length_xy(human_xy)
+
+    path_ratio = None
+    if robot_len > 1e-9 and human_len > 1e-9:
+        path_ratio = float(min(human_len / robot_len, robot_len / human_len))
+
+    duration_ratio = float(min(len(human_xy), len(robot_xy)) / max(len(human_xy), len(robot_xy)))
+    path_score = 0.5 if path_ratio is None else _clip01(path_ratio)
+    dur_score = _clip01(duration_ratio)
+    success_score = 1.0 if plan_success else 0.0
+    tes = float(0.50 * path_score + 0.20 * dur_score + 0.30 * success_score)
+
+    return {
+        "robot_path_length_m": robot_len,
+        "human_path_length_m": human_len,
+        "path_efficiency_ratio": path_ratio,
+        "duration_ratio": duration_ratio,
+        "task_efficiency_score": tes,
+    }
+
+
+def _turning_angles(xy: np.ndarray) -> np.ndarray:
+    dirs = _step_dirs(xy)
+    if len(dirs) <= 1:
+        return np.zeros((0,), dtype=float)
+    dots = np.sum(dirs[:-1] * dirs[1:], axis=1)
+    dots = np.clip(dots, -1.0, 1.0)
+    return np.arccos(dots)
+
+
+def _react_proxy(xy: np.ndarray) -> float | None:
+    ang = _turning_angles(xy)
+    if len(ang) == 0:
+        return None
+    return float(np.mean(ang))
+
+
+def _react_metrics(robot_xy: np.ndarray, human_xy: np.ndarray) -> dict[str, float | None]:
+    robot_react = _react_proxy(robot_xy)
+    human_react = _react_proxy(human_xy)
+    react_gap = None
+    if robot_react is not None and human_react is not None:
+        react_gap = float(abs(robot_react - human_react))
+    return {
+        "react_proxy_robot": robot_react,
+        "react_proxy_human": human_react,
+        "react_proxy_gap": react_gap,
+    }
 
 
 def evaluate_plan(
@@ -79,42 +354,113 @@ def evaluate_plan(
     plan: PlanResult,
     *,
     scene_json_path: str | Path | None = None,
-    tracks_x_field: str = "bkg_x",
-    tracks_y_field: str = "bkg_y",
 ) -> EvalResult:
-    min_human_distance_m: float | None = None
+    scene_type = _infer_scene_type(scene, task)
 
     try:
-        human_points = _load_human_points(
-            scene,
-            scene_json_path=scene_json_path,
-            x_field=tracks_x_field,
-            y_field=tracks_y_field,
+        if task.target is None:
+            raise ValueError("Task has no target track reference")
+
+        store = load_track_store(scene, scene_json_path=scene_json_path)
+        human_track = store.get_track_simple(task.target.track_id)
+
+        robot_track = _get_robot_track(plan)
+        if robot_track is None:
+            raise ValueError("Plan has no track trajectory")
+
+        robot_xy = _valid_xy(robot_track)
+        human_xy = _valid_xy(human_track)
+        if len(robot_xy) == 0:
+            raise ValueError("Robot track has no valid samples")
+        if len(human_xy) == 0:
+            raise ValueError("Human target track has no valid samples")
+
+        other_human_tracks = _get_other_human_tracks(store, task.target.track_id)
+        path_length_m = plan.path_length_m if plan.path_length_m is not None else robot_track.path_length_m()
+        min_human_distance_m = _compute_min_distance_between_tracks(robot_track, human_track)
+        scene_scale_m = _scene_scale_m(layout, task, human_xy)
+        robot_radius_m = float(getattr(robot, "radius_m", 0.3) or 0.3)
+        comfort_radius_m = max(0.8, 2.0 * robot_radius_m)
+
+        hls = _human_likeness_metrics(robot_xy, human_xy, scene_scale_m=scene_scale_m)
+        scs = _social_compatibility_metrics(robot_xy, human_xy, other_human_tracks, comfort_radius_m=comfort_radius_m)
+        tes = _task_efficiency_metrics(robot_xy, human_xy, plan_success=bool(plan.success))
+        react = _react_metrics(robot_xy, human_xy)
+
+        weights = {
+            "aligned_flow": (0.55, 0.25, 0.20),
+            "cross_flow": (0.40, 0.35, 0.25),
+            "icn": (0.30, 0.50, 0.20),
+            "generic": (0.45, 0.35, 0.20),
+            None: (0.45, 0.35, 0.20),
+        }
+        wh, ws, wt = weights.get(scene_type, weights["generic"])
+
+        overall_score = None
+        if all(
+            metrics.get(key) is not None
+            for metrics, key in (
+                (hls, "human_likeness_score"),
+                (scs, "social_compatibility_score"),
+                (tes, "task_efficiency_score"),
+            )
+        ):
+            overall_score = float(
+                wh * float(hls["human_likeness_score"])
+                + ws * float(scs["social_compatibility_score"])
+                + wt * float(tes["task_efficiency_score"])
+            )
+
+        return EvalResult(
+            success=plan.success,
+            path_length_m=path_length_m,
+            runtime_s=plan.runtime_s,
+            min_human_distance_m=min_human_distance_m,
+            message=plan.message,
+            planner_name=plan.planner_name,
+            scene_type=scene_type,
+            target_track_id=task.target.track_id,
+            scene_scale_m=scene_scale_m,
+            comfort_radius_m=comfort_radius_m,
+            human_likeness_score=hls["human_likeness_score"],
+            social_compatibility_score=scs["social_compatibility_score"],
+            task_efficiency_score=tes["task_efficiency_score"],
+            overall_score=overall_score,
+            path_deviation_m=hls["path_deviation_m"],
+            lateral_deviation_m=hls["lateral_deviation_m"],
+            direction_similarity=hls["direction_similarity"],
+            min_other_human_distance_m=scs["min_other_human_distance_m"],
+            mean_other_human_min_distance_m=scs["mean_other_human_min_distance_m"],
+            flow_axis_alignment=scs["flow_axis_alignment"],
+            flow_coherence=scs["flow_coherence"],
+            disruption_rate=scs["disruption_rate"],
+            robot_path_length_m=tes["robot_path_length_m"],
+            human_path_length_m=tes["human_path_length_m"],
+            path_efficiency_ratio=tes["path_efficiency_ratio"],
+            duration_ratio=tes["duration_ratio"],
+            react_proxy_robot=react["react_proxy_robot"],
+            react_proxy_human=react["react_proxy_human"],
+            react_proxy_gap=react["react_proxy_gap"],
+            n_other_human_tracks=len(other_human_tracks),
+            metadata={
+                "hls": hls.get("human_likeness_score"),
+                "scs": scs.get("social_compatibility_score"),
+                "tes": tes.get("task_efficiency_score"),
+            },
         )
-        min_human_distance_m = _compute_min_human_distance_m(plan, human_points)
+
     except Exception as e:
-        # Keep evaluation lightweight and non-fatal at this stage.
         return EvalResult(
             success=plan.success,
             path_length_m=plan.path_length_m,
             runtime_s=plan.runtime_s,
-            num_waypoints=len(plan.waypoints),
             min_human_distance_m=None,
             message=plan.message,
-            metadata={
-                "planner": plan.planner_name,
-                "min_human_distance_error": str(e),
-            },
+            planner_name=plan.planner_name,
+            scene_type=scene_type,
+            target_track_id=task.target.track_id if task.target is not None else None,
+            task_efficiency_score=0.0 if not plan.success else None,
+            overall_score=0.0 if not plan.success else None,
+            n_other_human_tracks=0,
+            metadata={"evaluation_error": str(e)},
         )
-
-    return EvalResult(
-        success=plan.success,
-        path_length_m=plan.path_length_m,
-        runtime_s=plan.runtime_s,
-        num_waypoints=len(plan.waypoints),
-        min_human_distance_m=min_human_distance_m,
-        message=plan.message,
-        metadata={
-            "planner": plan.planner_name,
-        },
-    )

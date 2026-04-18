@@ -1,13 +1,16 @@
 {
   "task_id": "test.cross_001",
   "scene": {
-    "scene_id": "test.simple",
-    "path": "../fixtures/minimal_scene.json"
+    "scene_id": "test.scene_with_tracks",
+    "path": "minimal_scene_with_tracks.json"
   },
   "task_type": "cross_flow",
   "robot": {
     "start": [1.0, 8.5],
     "goal": [8.5, 2.0]
+  },
+  "target": {
+    "track_id": "t1"
   },
   "metadata": {
     "description": "Minimal test task"

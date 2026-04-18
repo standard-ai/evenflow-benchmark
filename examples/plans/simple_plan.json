@@ -1,23 +1,21 @@
 {
   "planner_name": "geometry",
   "success": true,
-  "waypoints": [
-    {
-      "x": 1.0,
-      "y": 8.5,
-      "t": null
-    },
-    {
-      "x": 8.5,
-      "y": 8.5,
-      "t": null
-    },
-    {
-      "x": 8.5,
-      "y": 2.0,
-      "t": null
+  "track": {
+    "track_id": "robot_plan",
+    "timestamps": [0.0, 6.25, 11.6667],
+    "x": [1.0, 8.5, 8.5],
+    "y": [8.5, 8.5, 2.0],
+    "vx": [1.2, 0.0, 0.0],
+    "vy": [0.0, -1.2, -1.2],
+    "position_valid": [true, true, true],
+    "velocity_valid": [true, true, true],
+    "metadata": {
+      "source": "fixture_migrated",
+      "timing_policy": "constant_speed_no_wait",
+      "max_speed_mps": 1.2
     }
-  ],
+  },
   "path_length_m": 14.0,
   "runtime_s": 0.002,
   "message": "ok",

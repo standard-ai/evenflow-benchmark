@@ -1,0 +1,7 @@
+timestamp,person_track_id,x,y,vx,vy,position_source,position_valid,velocity_valid
+1971-01-01T00:00:00Z,t1,1.0,1.0,0.5,0.0,waist,True,True
+1971-01-01T00:00:01Z,t1,1.5,1.0,0.5,0.0,waist,True,True
+1971-01-01T00:00:02Z,t1,2.0,1.0,0.5,0.0,waist,True,True
+1971-01-01T00:00:00Z,t2,3.0,3.0,0.0,-0.5,neck,True,True
+1971-01-01T00:00:01Z,t2,3.0,2.5,0.0,-0.5,neck,True,True
+1971-01-01T00:00:02Z,t2,3.0,2.0,0.0,-0.5,neck,True,True

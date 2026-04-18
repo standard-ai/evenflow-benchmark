@@ -56,8 +56,6 @@ def build_parser() -> argparse.ArgumentParser:
     render_scene_parser.add_argument("--no-u-hat", action="store_true")
     render_scene_parser.add_argument("--u-hat-scale", type=float, default=1.0)
     render_scene_parser.add_argument("--show-tracks", action="store_true")
-    render_scene_parser.add_argument("--tracks-x-field", default="bkg_x")
-    render_scene_parser.add_argument("--tracks-y-field", default="bkg_y")
     render_scene_parser.add_argument("--max-tracks", type=int, default=None)
     render_scene_parser.add_argument("--title", default=None)
 
@@ -91,8 +89,6 @@ def build_parser() -> argparse.ArgumentParser:
     render_scene_task_parser.add_argument("--u-hat-scale", type=float, default=1.0)
     render_scene_task_parser.add_argument("--no-straight-line", action="store_true")
     render_scene_task_parser.add_argument("--show-tracks", action="store_true")
-    render_scene_task_parser.add_argument("--tracks-x-field", default="bkg_x")
-    render_scene_task_parser.add_argument("--tracks-y-field", default="bkg_y")
     render_scene_task_parser.add_argument("--max-tracks", type=int, default=None)
     render_scene_task_parser.add_argument("--title", default=None)
 
@@ -106,7 +102,7 @@ def build_parser() -> argparse.ArgumentParser:
     render_plan_parser.add_argument("--no-obstacle-labels", action="store_true")
     render_plan_parser.add_argument("--no-exit-labels", action="store_true")
     render_plan_parser.add_argument("--no-plan-annotations", action="store_true")
-    render_plan_parser.add_argument("--show-waypoints", action="store_true")
+    render_plan_parser.add_argument("--show-samples", action="store_true")
     render_plan_parser.add_argument("--title", default=None)
 
     render_scene_task_plan_parser = subparsers.add_parser(
@@ -128,9 +124,7 @@ def build_parser() -> argparse.ArgumentParser:
     render_scene_task_plan_parser.add_argument("--u-hat-scale", type=float, default=1.0)
     render_scene_task_plan_parser.add_argument("--no-straight-line", action="store_true")
     render_scene_task_plan_parser.add_argument("--show-tracks", action="store_true")
-    render_scene_task_plan_parser.add_argument("--show-waypoints", action="store_true")
-    render_scene_task_plan_parser.add_argument("--tracks-x-field", default="bkg_x")
-    render_scene_task_plan_parser.add_argument("--tracks-y-field", default="bkg_y")
+    render_scene_task_plan_parser.add_argument("--show-samples", action="store_true")
     render_scene_task_plan_parser.add_argument("--max-tracks", type=int, default=None)
     render_scene_task_plan_parser.add_argument("--title", default=None)
 
@@ -207,8 +201,6 @@ def cmd_render_scene(args: argparse.Namespace) -> int:
         args.output_image,
         scene_json_path=args.scene_json,
         show_tracks=args.show_tracks,
-        tracks_x_field=args.tracks_x_field,
-        tracks_y_field=args.tracks_y_field,
         max_tracks=args.max_tracks,
         show_obstacle_labels=not args.no_obstacle_labels,
         show_exit_labels=not args.no_exit_labels,
@@ -250,8 +242,6 @@ def cmd_render_scene_task(args: argparse.Namespace) -> int:
         args.output_image,
         scene_json_path=args.scene_json,
         show_tracks=args.show_tracks,
-        tracks_x_field=args.tracks_x_field,
-        tracks_y_field=args.tracks_y_field,
         max_tracks=args.max_tracks,
         show_obstacle_labels=not args.no_obstacle_labels,
         show_exit_labels=not args.no_exit_labels,
@@ -277,7 +267,7 @@ def cmd_render_plan(args: argparse.Namespace) -> int:
         show_obstacle_labels=not args.no_obstacle_labels,
         show_exit_labels=not args.no_exit_labels,
         annotate_plan=not args.no_plan_annotations,
-        show_waypoints=args.show_waypoints,
+        show_samples=args.show_samples,
         title=args.title,
     )
     print(f"Wrote {args.output_image}")
@@ -297,8 +287,6 @@ def cmd_render_scene_task_plan(args: argparse.Namespace) -> int:
         args.output_image,
         scene_json_path=args.scene_json,
         show_tracks=args.show_tracks,
-        tracks_x_field=args.tracks_x_field,
-        tracks_y_field=args.tracks_y_field,
         max_tracks=args.max_tracks,
         show_obstacle_labels=not args.no_obstacle_labels,
         show_exit_labels=not args.no_exit_labels,
@@ -309,7 +297,7 @@ def cmd_render_scene_task_plan(args: argparse.Namespace) -> int:
         show_u_hat=not args.no_u_hat,
         u_hat_scale=args.u_hat_scale,
         show_straight_line=not args.no_straight_line,
-        show_waypoints=args.show_waypoints,
+        show_samples=args.show_samples,
         title=args.title,
     )
     print(f"Wrote {args.output_image}")
@@ -371,8 +359,15 @@ def cmd_evaluate_plan(args: argparse.Namespace) -> int:
     print(f"  success: {result.success}")
     print(f"  path_length_m: {result.path_length_m}")
     print(f"  runtime_s: {result.runtime_s}")
-    print(f"  num_waypoints: {result.num_waypoints}")
     print(f"  min_human_distance_m: {result.min_human_distance_m}")
+    if result.human_likeness_score is not None:
+        print(f"  human_likeness_score: {result.human_likeness_score}")
+    if result.social_compatibility_score is not None:
+        print(f"  social_compatibility_score: {result.social_compatibility_score}")
+    if result.task_efficiency_score is not None:
+        print(f"  task_efficiency_score: {result.task_efficiency_score}")
+    if result.overall_score is not None:
+        print(f"  overall_score: {result.overall_score}")
     if result.message:
         print(f"  message: {result.message}")
 
@@ -383,22 +378,18 @@ def cmd_run_geometry(args: argparse.Namespace) -> int:
     task = load_task(args.task_json)
     robot = load_robot(args.robot_json)
 
-    # load scene from task reference
     scene_json_path = _resolve_relative(args.task_json, task.scene.path)
     scene = load_scene(scene_json_path)
 
-    # sanity check IDs match
     if scene.scene_id != task.scene.scene_id:
         raise ValueError(
             f"Scene ID mismatch: task expects {task.scene.scene_id!r} "
             f"but loaded {scene.scene_id!r}"
         )
 
-    # load layout from scene reference
     layout_json_path = _resolve_relative(scene_json_path, scene.layout.path)
     layout = load_layout(layout_json_path)
 
-    # sanity check layout IDs
     if layout.layout_id != scene.layout.layout_id:
         raise ValueError(
             f"Layout ID mismatch: scene expects {scene.layout.layout_id!r} "
