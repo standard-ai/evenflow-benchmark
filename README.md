@@ -3,25 +3,15 @@
 EvenFlow is an evaluation suite for shared-space navigation, built from real human trajectory data.
 
 Most benchmarks evaluate whether an agent can navigate *around* people.  
-EvenFlow evaluates whether an agent can navigate *with* them.
+**EvenFlow evaluates whether an agent can navigate *with* them.**
 
-It provides a lightweight specification and tooling for converting real-world trajectories into executable navigation tasks, enabling trajectory-level evaluation of planner behavior in realistic human environments.
-
----
-
-## What EvenFlow Provides
-
-- A small, explicit JSON specification for **layouts**, **scenes**, **tasks**, and **robots**
-- A canonical motion representation based on **time-indexed trajectories**
-- Validation utilities for catching spec errors early
-- Rendering tools for visual debugging
-- Reference baseline planners
-- A foundation for **trajectory-based evaluation**
-- CLI tools for validation, rendering, and evaluation
+It converts real-world human trajectories into executable navigation tasks, enabling trajectory-level evaluation of planner behavior in realistic environments.
 
 ---
 
-## Installation
+## ⚡ Getting Started in 2 Minutes
+
+### 1. Install
 
 ```bash
 git clone https://github.com/<your-org>/evenflow.git
@@ -31,188 +21,111 @@ pip install -e .
 
 ---
 
-## Quickstart
-
-Run a planner on a task:
+### 2. Download the dataset
 
 ```bash
-evenflow run \
-  benchmark/aligned_flow/tasks/aligned_flow.af_0001.task.json \
+huggingface-cli download standard-cognition/EvenFlow \
+  --repo-type dataset \
+  --local-dir ./data
+```
+
+---
+
+### 3. Visualize a scene
+
+```bash
+evenflow render-scene \
+  data/benchmark/aligned_flow/scenes/aligned_flow.af_0001.scene.json \
+  --output outputs/scene.png
+```
+
+---
+
+### 4. Run a planner (geometric baseline)
+
+```bash
+evenflow run-geometry \
+  data/benchmark/aligned_flow/tasks/aligned_flow.af_0001.task.json \
   examples/robots/simple_disk.json \
-  --planner astar \
   --output outputs/plan.json
 ```
 
-Evaluate the result:
+---
+
+### 5. Evaluate
 
 ```bash
 evenflow evaluate \
   outputs/plan.json \
-  --task benchmark/aligned_flow/tasks/aligned_flow.af_0001.task.json
+  --task data/benchmark/aligned_flow/tasks/aligned_flow.af_0001.task.json
 ```
 
-Render the result:
+---
+
+### 6. Visualize the plan
 
 ```bash
 evenflow render \
   outputs/plan.json \
-  --task benchmark/aligned_flow/tasks/aligned_flow.af_0001.task.json \
+  --task data/benchmark/aligned_flow/tasks/aligned_flow.af_0001.task.json \
   --output outputs/render.png
 ```
 
 ---
 
-## Concepts
+## 🧪 Quickstart to Writing a Custom Planner
 
-EvenFlow represents navigation as a hierarchy from static geometry to executable tasks constructed from human trajectories.
+EvenFlow is designed to evaluate arbitrary planners. You only need to implement a minimal interface.
 
-### 1. Layout
+### Minimal interface
 
-The **layout** defines static geometry.
+```python
+def plan(task, robot):
+    # Your planner logic here
+    return PlanResult(...)
+```
 
-- boundary polygon  
-- obstacles  
-- exits (optional)  
-- metadata  
+### Required output
 
-### 2. Scene
+Your planner must return a **PlanResult** containing:
 
-A **scene** defines a time-localized slice of human behavior.
+- `success` (bool)
+- `track` (TrackSimple)
+- `runtime_s` (float)
 
-- time window  
-- tracking CSV reference  
-- dominant flow direction  
-- interaction center  
+### Key requirement
 
-### 3. Task
+The output trajectory must be **time-parameterized**.
 
-A **task** defines a robot navigation problem inside a scene.
+EvenFlow evaluates behavior over time—not just geometric feasibility.
 
-- robot start  
-- robot goal  
-- task type  
-- target human trajectory  
+### Running your planner
 
-### 4. Robot
-
-A **robot** defines the embodiment used by planners.
-
-- kinematics  
-- footprint  
-- dynamics  
-
----
-
-## Motion Representation
-
-### TrackStore
-Dense representation of all trajectories in a scene.
-
-### TrackSimple
-Canonical trajectory:
-
-- timestamps  
-- x, y  
-- optional vx, vy  
-
-### TrackPose
-Extends TrackSimple with full pose data.
-
----
-
-## Planner Output
-
-Planners produce a `PlanResult`:
-
-- planner_name  
-- success  
-- track (TrackSimple)  
-- path_length_m  
-- runtime_s  
-- message  
-
-Successful plans **must** include a time-parameterized trajectory.
-
-This enforces a trajectory-first evaluation, where behavior—not just feasibility—is assessed.
-
----
-
-## Evaluation
-
-Evaluation compares the robot trajectory to the target human trajectory within the same dynamic scene context.
-
-Metrics capture:
-
-- task completion  
-- trajectory efficiency  
-- interaction with surrounding humans  
-- deviation from human-like behavior  
-
-EvenFlow is designed as a diagnostic benchmark: rather than a single scalar score, evaluation exposes how planners behave across different interaction regimes.
-
----
-
-## CLI
-
-Validate:
+Add a simple wrapper and call:
 
 ```bash
-evenflow validate-layout layout.json
-evenflow validate-scene scene.json
-evenflow validate-task task.json
-evenflow validate-robot robot.json
-evenflow validate-plan plan.json
+evenflow run \
+  <task.json> \
+  <robot.json> \
+  --planner your_planner
+```
+
+### Reference example
+
+See the geometric baseline:
+
+```
+evenflow/planners/geometry/
 ```
 
 ---
 
-## Data
+## Dataset
 
-Benchmark data is hosted separately due to size and licensing.
-
-Download instructions:  
-👉 <link-to-dataset>
-
-Expected directory structure:
-
-```
-benchmark/
-  aligned_flow/
-  cross_flow/
-  icn/
-```
-
----
-
-## Summary
-
-EvenFlow is a trajectory-first evaluation suite:
-
-- plans are trajectories  
-- humans define the task  
-- evaluation is behavior, not just success  
-
-It provides a clean path from real-world data to executable navigation benchmarks.
-
----
-
-## Citation
-
-```bibtex
-@article{evenflow2026,
-  title={EvenFlow: Evaluating Navigation with Humans},
-  author={...},
-  year={2026}
-}
-```
+👉 https://huggingface.co/datasets/standard-cognition/EvenFlow
 
 ---
 
 ## License
 
-This dataset is released under a custom license.
-
-- Free for research use  
-- Commercial use requires a separate agreement  
-
-See LICENSE for details.
+Custom research license. See LICENSE file.
