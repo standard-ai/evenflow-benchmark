@@ -29,10 +29,6 @@ pip install huggingface_hub
 hf download standard-cognition/EvenFlow \
   --repo-type dataset \
   --local-dir data
-
-# Normalize directory structure
-mv data/standard-cognition/EvenFlow/* data/
-rm -rf data/standard-cognition
 ```
 
 ---
