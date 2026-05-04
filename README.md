@@ -24,6 +24,7 @@ pip install .
 ### 2. Download the dataset
 
 ```bash
+pip install huggingface_hub
 huggingface-cli download standard-cognition/EvenFlow \
   --repo-type dataset \
   --local-dir ./data \
