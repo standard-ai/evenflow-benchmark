@@ -25,9 +25,9 @@ pip install .
 
 ```bash
 pip install huggingface_hub
-huggingface-cli download standard-cognition/EvenFlow \
+hf download standard-cognition/EvenFlow \
   --repo-type dataset \
-  --local-dir ./data \
+  --local-dir data \
   --local-dir-use-symlinks False
 ```
 
