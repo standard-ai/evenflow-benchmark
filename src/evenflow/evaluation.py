@@ -1,11 +1,78 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 
 from .io import load_track_store
 from .models import EvalResult, Layout, PlanResult, Robot, Scene, Task, TrackSimple
+
+
+@dataclass(frozen=True)
+class EvalConfig:
+    version: str
+    weights_by_scene_type: dict[str | None, tuple[float, float, float, float]]
+    task_efficiency_mode: str  # "legacy", "path_only", "progress_smoothed", "path_only" for v4 gate input
+    overall_mode: str = "linear"  # "linear" or "behavior_gated"
+    efficiency_gate_threshold: float = 0.75
+    efficiency_gate_alpha: float = 4.0
+
+
+EVAL_CONFIGS: dict[str, EvalConfig] = {
+    "v1": EvalConfig(
+        version="v1",
+        weights_by_scene_type={
+            "aligned_flow": (0.25, 0.20, 0.20, 0.35),  # goal, social, efficiency, human
+            "cross_flow": (0.25, 0.25, 0.20, 0.30),
+            "icn": (0.20, 0.35, 0.15, 0.30),
+            "generic": (0.25, 0.25, 0.20, 0.30),
+            None: (0.25, 0.25, 0.20, 0.30),
+        },
+        task_efficiency_mode="legacy",
+        overall_mode="linear",
+    ),
+    "v2": EvalConfig(
+        version="v2",
+        weights_by_scene_type={
+            "aligned_flow": (0.20, 0.15, 0.20, 0.45),
+            "cross_flow": (0.25, 0.25, 0.15, 0.35),
+            "icn": (0.20, 0.40, 0.10, 0.30),
+            "generic": (0.25, 0.25, 0.15, 0.35),
+            None: (0.25, 0.25, 0.15, 0.35),
+        },
+        task_efficiency_mode="path_only",
+        overall_mode="linear",
+    ),
+    "v3": EvalConfig(
+        version="v3",
+        weights_by_scene_type={
+            "aligned_flow": (0.20, 0.15, 0.15, 0.50),
+            "cross_flow": (0.25, 0.25, 0.10, 0.40),
+            "icn": (0.20, 0.45, 0.05, 0.30),
+            "generic": (0.25, 0.25, 0.10, 0.40),
+            None: (0.25, 0.25, 0.10, 0.40),
+        },
+        task_efficiency_mode="progress_smoothed",
+        overall_mode="linear",
+    ),
+    "v4": EvalConfig(
+        version="v4",
+        # for v4, the efficiency weight is ignored in final aggregation because
+        # efficiency enters through a nonlinear gate. Keep the tuple shape for compatibility.
+        weights_by_scene_type={
+            "aligned_flow": (0.25, 0.25, 0.00, 0.50),  # goal, social, efficiency_unused, human
+            "cross_flow": (0.25, 0.30, 0.00, 0.45),
+            "icn": (0.20, 0.50, 0.00, 0.30),
+            "generic": (0.25, 0.30, 0.00, 0.45),
+            None: (0.25, 0.30, 0.00, 0.45),
+        },
+        task_efficiency_mode="path_only",
+        overall_mode="behavior_gated",
+        efficiency_gate_threshold=0.78,
+        efficiency_gate_alpha=5.0,
+    ),
+}
 
 
 def _clip01(x: float) -> float:
@@ -175,7 +242,6 @@ def _goal_completion_metrics(
 
     goal = np.asarray(task.robot.goal, dtype=float)
     goal_dist = float(np.linalg.norm(robot_xy[-1] - goal))
-    # generous completion radius for v1
     goal_tol = max(0.5, 2.0 * robot_radius_m)
     goal_score = _clip01(1.0 - goal_dist / goal_tol)
 
@@ -186,6 +252,20 @@ def _goal_completion_metrics(
         "goal_distance_m": goal_dist,
         "goal_completion_score": goal_score,
     }
+
+
+def _goal_progress_score(robot_xy: np.ndarray, task: Task) -> float | None:
+    if len(robot_xy) == 0:
+        return None
+
+    start = np.asarray(task.robot.start, dtype=float)
+    goal = np.asarray(task.robot.goal, dtype=float)
+    sg = float(np.linalg.norm(goal - start))
+    if sg <= 1e-9:
+        return 1.0
+
+    final_goal_dist = float(np.linalg.norm(robot_xy[-1] - goal))
+    return _clip01(1.0 - final_goal_dist / sg)
 
 
 def _human_likeness_metrics(
@@ -222,7 +302,6 @@ def _human_likeness_metrics(
     lateral_score = _clip01(1.0 - (lateral_dev or 0.0) / max(scene_scale_m, 1e-6))
     dir_score = 0.5 if direction_similarity is None else _clip01(direction_similarity)
 
-    # v1 behavioral alignment: emphasize route/shape agreement over exact replay
     hls = float(0.50 * path_score + 0.30 * lateral_score + 0.20 * dir_score)
 
     return {
@@ -352,11 +431,29 @@ def _social_compatibility_metrics(
     }
 
 
+def _resolve_eval_config(
+    evaluation_version: str | None = None,
+    eval_config: EvalConfig | None = None,
+) -> EvalConfig:
+    if eval_config is not None:
+        return eval_config
+
+    version = evaluation_version or "v1"
+    if version not in EVAL_CONFIGS:
+        raise ValueError(
+            f"Unknown evaluation_version={version!r}. "
+            f"Expected one of {sorted(EVAL_CONFIGS.keys())}"
+        )
+    return EVAL_CONFIGS[version]
+
+
 def _task_efficiency_metrics(
     robot_xy: np.ndarray,
     human_xy: np.ndarray,
+    task: Task,
     *,
     plan_success: bool,
+    mode: str,
 ) -> dict[str, float | None]:
     if len(robot_xy) == 0 or len(human_xy) == 0:
         return {
@@ -364,6 +461,7 @@ def _task_efficiency_metrics(
             "human_path_length_m": None,
             "path_efficiency_ratio": None,
             "duration_ratio": None,
+            "goal_progress_score": None,
             "task_efficiency_score": 0.0 if not plan_success else None,
         }
 
@@ -377,17 +475,134 @@ def _task_efficiency_metrics(
     duration_ratio = float(min(len(human_xy), len(robot_xy)) / max(len(human_xy), len(robot_xy)))
     path_score = 0.5 if path_ratio is None else _clip01(path_ratio)
     dur_score = _clip01(duration_ratio)
-    success_score = 1.0 if plan_success else 0.0
+    progress_score = _goal_progress_score(robot_xy, task)
 
-    tes = float(0.55 * path_score + 0.15 * dur_score + 0.30 * success_score)
+    if mode == "legacy":
+        success_score = 1.0 if plan_success else 0.0
+        tes = float(0.55 * path_score + 0.15 * dur_score + 0.30 * success_score)
+
+    elif mode == "path_only":
+        tes = float(0.70 * path_score + 0.30 * dur_score)
+        if not plan_success:
+            tes = 0.0
+
+    elif mode == "progress_smoothed":
+        progress_term = 0.0 if progress_score is None else progress_score
+        tes = float(0.45 * path_score + 0.20 * dur_score + 0.35 * progress_term)
+
+    else:
+        raise ValueError(f"Unknown task_efficiency mode: {mode!r}")
 
     return {
         "robot_path_length_m": robot_len,
         "human_path_length_m": human_len,
         "path_efficiency_ratio": path_ratio,
         "duration_ratio": duration_ratio,
+        "goal_progress_score": progress_score,
         "task_efficiency_score": tes,
     }
+
+
+def _efficiency_gate(efficiency_score: float | None, threshold: float, alpha: float) -> float | None:
+    if efficiency_score is None:
+        return None
+    e = float(_clip01(efficiency_score))
+    if e >= threshold:
+        return 1.0
+    return float(np.exp(-alpha * (threshold - e)))
+
+
+def _aggregate_overall_score(
+    *,
+    cfg: EvalConfig,
+    goal_score: float | None,
+    social_score: float | None,
+    efficiency_score: float | None,
+    human_score: float | None,
+    scene_type: str | None,
+) -> tuple[float | None, dict[str, float | None]]:
+    wg, ws, we, wb = cfg.weights_by_scene_type.get(
+        scene_type,
+        cfg.weights_by_scene_type["generic"],
+    )
+
+    if goal_score is None or social_score is None or human_score is None:
+        return None, {
+            "goal_completion": wg,
+            "social_compatibility": ws,
+            "task_efficiency": we,
+            "human_likeness": wb,
+            "base_score": None,
+            "efficiency_gate": None,
+        }
+
+    if cfg.overall_mode == "linear":
+        if efficiency_score is None:
+            return None, {
+                "goal_completion": wg,
+                "social_compatibility": ws,
+                "task_efficiency": we,
+                "human_likeness": wb,
+                "base_score": None,
+                "efficiency_gate": None,
+            }
+        overall = float(
+            wg * float(goal_score)
+            + ws * float(social_score)
+            + we * float(efficiency_score)
+            + wb * float(human_score)
+        )
+        return overall, {
+            "goal_completion": wg,
+            "social_compatibility": ws,
+            "task_efficiency": we,
+            "human_likeness": wb,
+            "base_score": overall,
+            "efficiency_gate": 1.0,
+        }
+
+    if cfg.overall_mode == "behavior_gated":
+        # efficiency weight is intentionally not used linearly here
+        weight_sum = wg + ws + wb
+        if weight_sum <= 1e-9:
+            return None, {
+                "goal_completion": wg,
+                "social_compatibility": ws,
+                "task_efficiency": we,
+                "human_likeness": wb,
+                "base_score": None,
+                "efficiency_gate": None,
+            }
+
+        base_score = float(
+            (wg * float(goal_score) + ws * float(social_score) + wb * float(human_score))
+            / weight_sum
+        )
+        gate = _efficiency_gate(
+            efficiency_score,
+            threshold=cfg.efficiency_gate_threshold,
+            alpha=cfg.efficiency_gate_alpha,
+        )
+        if gate is None:
+            return None, {
+                "goal_completion": wg,
+                "social_compatibility": ws,
+                "task_efficiency": we,
+                "human_likeness": wb,
+                "base_score": base_score,
+                "efficiency_gate": None,
+            }
+        overall = float(base_score * gate)
+        return overall, {
+            "goal_completion": wg,
+            "social_compatibility": ws,
+            "task_efficiency": we,
+            "human_likeness": wb,
+            "base_score": base_score,
+            "efficiency_gate": gate,
+        }
+
+    raise ValueError(f"Unknown overall_mode: {cfg.overall_mode!r}")
 
 
 def _turning_angles(xy: np.ndarray) -> np.ndarray:
@@ -427,9 +642,14 @@ def evaluate_plan(
     plan: PlanResult,
     *,
     scene_json_path: str | Path | None = None,
+    evaluation_version: str = "v1",
+    eval_config: EvalConfig | None = None,
 ) -> EvalResult:
     """
-    EvenFlow evaluation v1.
+    EvenFlow evaluation.
+
+    Supports multiple evaluation configurations via `evaluation_version`
+    or an explicit `eval_config`.
 
     Metric families:
       1. Goal completion
@@ -439,6 +659,7 @@ def evaluate_plan(
     """
 
     scene_type = _infer_scene_type(scene, task)
+    cfg = _resolve_eval_config(evaluation_version=evaluation_version, eval_config=eval_config)
 
     try:
         if task.target is None:
@@ -482,36 +703,23 @@ def evaluate_plan(
             other_human_tracks,
             comfort_radius_m=comfort_radius_m,
         )
-        tes = _task_efficiency_metrics(robot_xy, human_xy, plan_success=bool(plan.success))
+        tes = _task_efficiency_metrics(
+            robot_xy,
+            human_xy,
+            task,
+            plan_success=bool(plan.success),
+            mode=cfg.task_efficiency_mode,
+        )
         react = _react_metrics(robot_xy, human_xy)
 
-        # Scene-type-specific aggregation.
-        # These weights reflect regime semantics from the technical note:
-        # aligned-flow emphasizes behavioral consistency with ambient motion,
-        # cross-flow balances structure and social coordination,
-        # ICN emphasizes social compatibility / negotiation.
-        weights = {
-            "aligned_flow": (0.25, 0.20, 0.20, 0.35),  # goal, safety, efficiency, behavior
-            "cross_flow": (0.25, 0.25, 0.20, 0.30),
-            "icn": (0.20, 0.35, 0.15, 0.30),
-            "generic": (0.25, 0.25, 0.20, 0.30),
-            None: (0.25, 0.25, 0.20, 0.30),
-        }
-        wg, ws, we, wb = weights.get(scene_type, weights["generic"])
-
-        overall_score = None
-        if (
-            goal_metrics["goal_completion_score"] is not None
-            and scs["social_compatibility_score"] is not None
-            and tes["task_efficiency_score"] is not None
-            and hls["human_likeness_score"] is not None
-        ):
-            overall_score = float(
-                wg * float(goal_metrics["goal_completion_score"])
-                + ws * float(scs["social_compatibility_score"])
-                + we * float(tes["task_efficiency_score"])
-                + wb * float(hls["human_likeness_score"])
-            )
+        overall_score, agg_meta = _aggregate_overall_score(
+            cfg=cfg,
+            goal_score=goal_metrics["goal_completion_score"],
+            social_score=scs["social_compatibility_score"],
+            efficiency_score=tes["task_efficiency_score"],
+            human_score=hls["human_likeness_score"],
+            scene_type=scene_type,
+        )
 
         return EvalResult(
             success=plan.success,
@@ -545,17 +753,25 @@ def evaluate_plan(
             react_proxy_gap=react["react_proxy_gap"],
             n_other_human_tracks=len(other_human_tracks),
             metadata={
+                "evaluation_version": cfg.version,
                 "goal_completion_score": goal_metrics["goal_completion_score"],
                 "goal_distance_m": goal_metrics["goal_distance_m"],
                 "hls": hls.get("human_likeness_score"),
                 "scs": scs.get("social_compatibility_score"),
                 "tes": tes.get("task_efficiency_score"),
                 "weights": {
-                    "goal_completion": wg,
-                    "social_compatibility": ws,
-                    "task_efficiency": we,
-                    "human_likeness": wb,
+                    "goal_completion": agg_meta["goal_completion"],
+                    "social_compatibility": agg_meta["social_compatibility"],
+                    "task_efficiency": agg_meta["task_efficiency"],
+                    "human_likeness": agg_meta["human_likeness"],
                 },
+                "overall_mode": cfg.overall_mode,
+                "task_efficiency_mode": cfg.task_efficiency_mode,
+                "goal_progress_score": tes.get("goal_progress_score"),
+                "base_score": agg_meta.get("base_score"),
+                "efficiency_gate": agg_meta.get("efficiency_gate"),
+                "efficiency_gate_threshold": cfg.efficiency_gate_threshold,
+                "efficiency_gate_alpha": cfg.efficiency_gate_alpha,
             },
         )
 
@@ -572,5 +788,90 @@ def evaluate_plan(
             task_efficiency_score=0.0 if not plan.success else None,
             overall_score=0.0 if not plan.success else None,
             n_other_human_tracks=0,
-            metadata={"evaluation_error": str(e)},
+            metadata={
+                "evaluation_version": cfg.version,
+                "overall_mode": cfg.overall_mode,
+                "task_efficiency_mode": cfg.task_efficiency_mode,
+                "evaluation_error": str(e),
+            },
         )
+
+
+def evaluate_plan_v1(
+    layout: Layout,
+    scene: Scene,
+    task: Task,
+    robot: Robot,
+    plan: PlanResult,
+    *,
+    scene_json_path: str | Path | None = None,
+) -> EvalResult:
+    return evaluate_plan(
+        layout,
+        scene,
+        task,
+        robot,
+        plan,
+        scene_json_path=scene_json_path,
+        evaluation_version="v1",
+    )
+
+
+def evaluate_plan_v2(
+    layout: Layout,
+    scene: Scene,
+    task: Task,
+    robot: Robot,
+    plan: PlanResult,
+    *,
+    scene_json_path: str | Path | None = None,
+) -> EvalResult:
+    return evaluate_plan(
+        layout,
+        scene,
+        task,
+        robot,
+        plan,
+        scene_json_path=scene_json_path,
+        evaluation_version="v2",
+    )
+
+
+def evaluate_plan_v3(
+    layout: Layout,
+    scene: Scene,
+    task: Task,
+    robot: Robot,
+    plan: PlanResult,
+    *,
+    scene_json_path: str | Path | None = None,
+) -> EvalResult:
+    return evaluate_plan(
+        layout,
+        scene,
+        task,
+        robot,
+        plan,
+        scene_json_path=scene_json_path,
+        evaluation_version="v3",
+    )
+
+
+def evaluate_plan_v4(
+    layout: Layout,
+    scene: Scene,
+    task: Task,
+    robot: Robot,
+    plan: PlanResult,
+    *,
+    scene_json_path: str | Path | None = None,
+) -> EvalResult:
+    return evaluate_plan(
+        layout,
+        scene,
+        task,
+        robot,
+        plan,
+        scene_json_path=scene_json_path,
+        evaluation_version="v4",
+    )

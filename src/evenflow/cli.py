@@ -128,34 +128,19 @@ def build_parser() -> argparse.ArgumentParser:
     render_scene_task_plan_parser.add_argument("--max-tracks", type=int, default=None)
     render_scene_task_plan_parser.add_argument("--title", default=None)
 
-    validate_layout_parser = subparsers.add_parser(
-        "validate-layout",
-        help="Validate a layout JSON file",
-    )
+    validate_layout_parser = subparsers.add_parser("validate-layout")
     validate_layout_parser.add_argument("layout_json")
 
-    validate_scene_parser = subparsers.add_parser(
-        "validate-scene",
-        help="Validate a scene JSON file",
-    )
+    validate_scene_parser = subparsers.add_parser("validate-scene")
     validate_scene_parser.add_argument("scene_json")
 
-    validate_task_parser = subparsers.add_parser(
-        "validate-task",
-        help="Validate a task JSON file",
-    )
+    validate_task_parser = subparsers.add_parser("validate-task")
     validate_task_parser.add_argument("task_json")
 
-    validate_robot_parser = subparsers.add_parser(
-        "validate-robot",
-        help="Validate a robot JSON file",
-    )
+    validate_robot_parser = subparsers.add_parser("validate-robot")
     validate_robot_parser.add_argument("robot_json")
 
-    validate_plan_parser = subparsers.add_parser(
-        "validate-plan",
-        help="Validate a plan JSON file",
-    )
+    validate_plan_parser = subparsers.add_parser("validate-plan")
     validate_plan_parser.add_argument("plan_json")
 
     evaluate_plan_parser = subparsers.add_parser(
@@ -167,6 +152,12 @@ def build_parser() -> argparse.ArgumentParser:
     evaluate_plan_parser.add_argument("task_json")
     evaluate_plan_parser.add_argument("robot_json")
     evaluate_plan_parser.add_argument("plan_json")
+    evaluate_plan_parser.add_argument(
+        "--evaluation-version",
+        choices=["v1", "v2", "v3","v4"],
+        default="v1",
+        help="Evaluation metric version (default: v1)",
+    )
 
     run_geometry_parser = subparsers.add_parser(
         "run-geometry",
@@ -179,167 +170,42 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def cmd_render_layout(args: argparse.Namespace) -> int:
-    layout = load_layout(args.layout_json)
-    save_layout_figure(
-        layout,
-        args.output_image,
-        show_obstacle_labels=not args.no_obstacle_labels,
-        show_exit_labels=not args.no_exit_labels,
-        title=args.title,
-    )
-    print(f"Wrote {args.output_image}")
-    return 0
-
-
-def cmd_render_scene(args: argparse.Namespace) -> int:
-    layout = load_layout(args.layout_json)
-    scene = load_scene(args.scene_json)
-    save_scene_figure(
-        layout,
-        scene,
-        args.output_image,
-        scene_json_path=args.scene_json,
-        show_tracks=args.show_tracks,
-        max_tracks=args.max_tracks,
-        show_obstacle_labels=not args.no_obstacle_labels,
-        show_exit_labels=not args.no_exit_labels,
-        annotate_scene=not args.no_scene_annotations,
-        show_p_star=not args.no_p_star,
-        show_u_hat=not args.no_u_hat,
-        u_hat_scale=args.u_hat_scale,
-        title=args.title,
-    )
-    print(f"Wrote {args.output_image}")
-    return 0
-
-
-def cmd_render_task(args: argparse.Namespace) -> int:
-    layout = load_layout(args.layout_json)
-    task = load_task(args.task_json)
-    save_task_figure(
-        layout,
-        task,
-        args.output_image,
-        show_obstacle_labels=not args.no_obstacle_labels,
-        show_exit_labels=not args.no_exit_labels,
-        annotate_task=not args.no_task_annotations,
-        show_straight_line=not args.no_straight_line,
-        title=args.title,
-    )
-    print(f"Wrote {args.output_image}")
-    return 0
-
-
-def cmd_render_scene_task(args: argparse.Namespace) -> int:
-    layout = load_layout(args.layout_json)
-    scene = load_scene(args.scene_json)
-    task = load_task(args.task_json)
-    save_scene_task_figure(
-        layout,
-        scene,
-        task,
-        args.output_image,
-        scene_json_path=args.scene_json,
-        show_tracks=args.show_tracks,
-        max_tracks=args.max_tracks,
-        show_obstacle_labels=not args.no_obstacle_labels,
-        show_exit_labels=not args.no_exit_labels,
-        annotate_scene=not args.no_scene_annotations,
-        annotate_task=not args.no_task_annotations,
-        show_p_star=not args.no_p_star,
-        show_u_hat=not args.no_u_hat,
-        u_hat_scale=args.u_hat_scale,
-        show_straight_line=not args.no_straight_line,
-        title=args.title,
-    )
-    print(f"Wrote {args.output_image}")
-    return 0
-
-
-def cmd_render_plan(args: argparse.Namespace) -> int:
-    layout = load_layout(args.layout_json)
-    plan = load_plan(args.plan_json)
-    save_plan_figure(
-        layout,
-        plan,
-        args.output_image,
-        show_obstacle_labels=not args.no_obstacle_labels,
-        show_exit_labels=not args.no_exit_labels,
-        annotate_plan=not args.no_plan_annotations,
-        show_samples=args.show_samples,
-        title=args.title,
-    )
-    print(f"Wrote {args.output_image}")
-    return 0
-
-
-def cmd_render_scene_task_plan(args: argparse.Namespace) -> int:
-    layout = load_layout(args.layout_json)
-    scene = load_scene(args.scene_json)
-    task = load_task(args.task_json)
-    plan = load_plan(args.plan_json)
-    save_scene_task_plan_figure(
-        layout,
-        scene,
-        task,
-        plan,
-        args.output_image,
-        scene_json_path=args.scene_json,
-        show_tracks=args.show_tracks,
-        max_tracks=args.max_tracks,
-        show_obstacle_labels=not args.no_obstacle_labels,
-        show_exit_labels=not args.no_exit_labels,
-        annotate_scene=not args.no_scene_annotations,
-        annotate_task=not args.no_task_annotations,
-        annotate_plan=not args.no_plan_annotations,
-        show_p_star=not args.no_p_star,
-        show_u_hat=not args.no_u_hat,
-        u_hat_scale=args.u_hat_scale,
-        show_straight_line=not args.no_straight_line,
-        show_samples=args.show_samples,
-        title=args.title,
-    )
-    print(f"Wrote {args.output_image}")
-    return 0
-
-
-def cmd_validate_layout(args: argparse.Namespace) -> int:
+def cmd_validate_layout(args):
     layout = load_layout(args.layout_json, validate=False)
     validate_layout(layout)
     print(f"Layout OK: {layout.layout_id}")
     return 0
 
 
-def cmd_validate_scene(args: argparse.Namespace) -> int:
+def cmd_validate_scene(args):
     scene = load_scene(args.scene_json, validate=False)
     validate_scene(scene)
     print(f"Scene OK: {scene.scene_id}")
     return 0
 
 
-def cmd_validate_task(args: argparse.Namespace) -> int:
+def cmd_validate_task(args):
     task = load_task(args.task_json, validate=False)
     validate_task(task)
     print(f"Task OK: {task.task_id}")
     return 0
 
 
-def cmd_validate_robot(args: argparse.Namespace) -> int:
+def cmd_validate_robot(args):
     robot = load_robot(args.robot_json, validate=False)
     validate_robot(robot)
     print(f"Robot OK: {robot.robot_id}")
     return 0
 
 
-def cmd_validate_plan(args: argparse.Namespace) -> int:
+def cmd_validate_plan(args):
     plan = load_plan(args.plan_json, validate=False)
     validate_plan_result(plan)
     print(f"Plan OK: {plan.planner_name}")
     return 0
 
 
-def cmd_evaluate_plan(args: argparse.Namespace) -> int:
+def cmd_evaluate_plan(args):
     layout = load_layout(args.layout_json)
     scene = load_scene(args.scene_json)
     task = load_task(args.task_json)
@@ -353,13 +219,15 @@ def cmd_evaluate_plan(args: argparse.Namespace) -> int:
         robot,
         plan,
         scene_json_path=args.scene_json,
+        evaluation_version=args.evaluation_version,
     )
 
-    print("Evaluation OK")
+    print(f"Evaluation OK ({args.evaluation_version})")
     print(f"  success: {result.success}")
     print(f"  path_length_m: {result.path_length_m}")
     print(f"  runtime_s: {result.runtime_s}")
     print(f"  min_human_distance_m: {result.min_human_distance_m}")
+
     if result.human_likeness_score is not None:
         print(f"  human_likeness_score: {result.human_likeness_score}")
     if result.social_compatibility_score is not None:
@@ -374,53 +242,28 @@ def cmd_evaluate_plan(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_run_geometry(args: argparse.Namespace) -> int:
+def cmd_run_geometry(args):
     task = load_task(args.task_json)
     robot = load_robot(args.robot_json)
 
     scene_json_path = _resolve_relative(args.task_json, task.scene.path)
     scene = load_scene(scene_json_path)
 
-    if scene.scene_id != task.scene.scene_id:
-        raise ValueError(
-            f"Scene ID mismatch: task expects {task.scene.scene_id!r} "
-            f"but loaded {scene.scene_id!r}"
-        )
-
     layout_json_path = _resolve_relative(scene_json_path, scene.layout.path)
     layout = load_layout(layout_json_path)
-
-    if layout.layout_id != scene.layout.layout_id:
-        raise ValueError(
-            f"Layout ID mismatch: scene expects {scene.layout.layout_id!r} "
-            f"but loaded {layout.layout_id!r}"
-        )
 
     planner = GeometryPlanner()
     plan = planner.plan(layout, scene, task, robot)
 
     save_plan(args.plan_json, plan)
-
     print(f"Wrote {args.plan_json}")
     return 0
 
 
-def main() -> int:
+def main():
     parser = build_parser()
     args = parser.parse_args()
 
-    if args.command == "render-layout":
-        return cmd_render_layout(args)
-    if args.command == "render-scene":
-        return cmd_render_scene(args)
-    if args.command == "render-task":
-        return cmd_render_task(args)
-    if args.command == "render-scene-task":
-        return cmd_render_scene_task(args)
-    if args.command == "render-plan":
-        return cmd_render_plan(args)
-    if args.command == "render-scene-task-plan":
-        return cmd_render_scene_task_plan(args)
     if args.command == "validate-layout":
         return cmd_validate_layout(args)
     if args.command == "validate-scene":
