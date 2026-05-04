@@ -152,12 +152,6 @@ def build_parser() -> argparse.ArgumentParser:
     evaluate_plan_parser.add_argument("task_json")
     evaluate_plan_parser.add_argument("robot_json")
     evaluate_plan_parser.add_argument("plan_json")
-    evaluate_plan_parser.add_argument(
-        "--evaluation-version",
-        choices=["v1", "v2", "v3","v4"],
-        default="v1",
-        help="Evaluation metric version (default: v1)",
-    )
 
     run_geometry_parser = subparsers.add_parser(
         "run-geometry",
@@ -219,10 +213,10 @@ def cmd_evaluate_plan(args):
         robot,
         plan,
         scene_json_path=args.scene_json,
-        evaluation_version=args.evaluation_version,
     )
 
-    print(f"Evaluation OK ({args.evaluation_version})")
+    eval_version = result.metadata.get("evaluation_version", "canonical") if result.metadata else "canonical"
+    print(f"Evaluation OK ({eval_version})")
     print(f"  success: {result.success}")
     print(f"  path_length_m: {result.path_length_m}")
     print(f"  runtime_s: {result.runtime_s}")

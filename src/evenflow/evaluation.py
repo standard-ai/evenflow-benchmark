@@ -13,66 +13,34 @@ from .models import EvalResult, Layout, PlanResult, Robot, Scene, Task, TrackSim
 class EvalConfig:
     version: str
     weights_by_scene_type: dict[str | None, tuple[float, float, float, float]]
-    task_efficiency_mode: str  # "legacy", "path_only", "progress_smoothed", "path_only" for v4 gate input
-    overall_mode: str = "linear"  # "linear" or "behavior_gated"
-    efficiency_gate_threshold: float = 0.75
-    efficiency_gate_alpha: float = 4.0
+    task_efficiency_mode: str
+    overall_mode: str = "behavior_gated"
+    efficiency_gate_threshold: float = 0.78
+    efficiency_gate_alpha: float = 5.0
 
 
-EVAL_CONFIGS: dict[str, EvalConfig] = {
-    "v1": EvalConfig(
-        version="v1",
-        weights_by_scene_type={
-            "aligned_flow": (0.25, 0.20, 0.20, 0.35),  # goal, social, efficiency, human
-            "cross_flow": (0.25, 0.25, 0.20, 0.30),
-            "icn": (0.20, 0.35, 0.15, 0.30),
-            "generic": (0.25, 0.25, 0.20, 0.30),
-            None: (0.25, 0.25, 0.20, 0.30),
-        },
-        task_efficiency_mode="legacy",
-        overall_mode="linear",
-    ),
-    "v2": EvalConfig(
-        version="v2",
-        weights_by_scene_type={
-            "aligned_flow": (0.20, 0.15, 0.20, 0.45),
-            "cross_flow": (0.25, 0.25, 0.15, 0.35),
-            "icn": (0.20, 0.40, 0.10, 0.30),
-            "generic": (0.25, 0.25, 0.15, 0.35),
-            None: (0.25, 0.25, 0.15, 0.35),
-        },
-        task_efficiency_mode="path_only",
-        overall_mode="linear",
-    ),
-    "v3": EvalConfig(
-        version="v3",
-        weights_by_scene_type={
-            "aligned_flow": (0.20, 0.15, 0.15, 0.50),
-            "cross_flow": (0.25, 0.25, 0.10, 0.40),
-            "icn": (0.20, 0.45, 0.05, 0.30),
-            "generic": (0.25, 0.25, 0.10, 0.40),
-            None: (0.25, 0.25, 0.10, 0.40),
-        },
-        task_efficiency_mode="progress_smoothed",
-        overall_mode="linear",
-    ),
-    "v4": EvalConfig(
-        version="v4",
-        # for v4, the efficiency weight is ignored in final aggregation because
-        # efficiency enters through a nonlinear gate. Keep the tuple shape for compatibility.
-        weights_by_scene_type={
-            "aligned_flow": (0.25, 0.25, 0.00, 0.50),  # goal, social, efficiency_unused, human
-            "cross_flow": (0.25, 0.30, 0.00, 0.45),
-            "icn": (0.20, 0.50, 0.00, 0.30),
-            "generic": (0.25, 0.30, 0.00, 0.45),
-            None: (0.25, 0.30, 0.00, 0.45),
-        },
-        task_efficiency_mode="path_only",
-        overall_mode="behavior_gated",
-        efficiency_gate_threshold=0.78,
-        efficiency_gate_alpha=5.0,
-    ),
-}
+# Canonical EvenFlow evaluation protocol described in the paper.
+#
+# Earlier metric variants were used internally during development. The public
+# release intentionally exposes a single evaluation protocol to keep benchmark
+# results unambiguous and reproducible.
+EVAL_CONFIG = EvalConfig(
+    version="v4",
+    # The efficiency weight is ignored in final aggregation because efficiency
+    # enters through a nonlinear gate. Keep the tuple shape for compatibility
+    # with metadata reporting.
+    weights_by_scene_type={
+        "aligned_flow": (0.25, 0.25, 0.00, 0.50),  # goal, social, efficiency_unused, human
+        "cross_flow": (0.25, 0.30, 0.00, 0.45),
+        "icn": (0.20, 0.50, 0.00, 0.30),
+        "generic": (0.25, 0.30, 0.00, 0.45),
+        None: (0.25, 0.30, 0.00, 0.45),
+    },
+    task_efficiency_mode="path_only",
+    overall_mode="behavior_gated",
+    efficiency_gate_threshold=0.78,
+    efficiency_gate_alpha=5.0,
+)
 
 
 def _clip01(x: float) -> float:
@@ -431,21 +399,6 @@ def _social_compatibility_metrics(
     }
 
 
-def _resolve_eval_config(
-    evaluation_version: str | None = None,
-    eval_config: EvalConfig | None = None,
-) -> EvalConfig:
-    if eval_config is not None:
-        return eval_config
-
-    version = evaluation_version or "v1"
-    if version not in EVAL_CONFIGS:
-        raise ValueError(
-            f"Unknown evaluation_version={version!r}. "
-            f"Expected one of {sorted(EVAL_CONFIGS.keys())}"
-        )
-    return EVAL_CONFIGS[version]
-
 
 def _task_efficiency_metrics(
     robot_xy: np.ndarray,
@@ -642,24 +595,27 @@ def evaluate_plan(
     plan: PlanResult,
     *,
     scene_json_path: str | Path | None = None,
-    evaluation_version: str = "v1",
-    eval_config: EvalConfig | None = None,
 ) -> EvalResult:
     """
-    EvenFlow evaluation.
+    Canonical EvenFlow evaluation.
 
-    Supports multiple evaluation configurations via `evaluation_version`
-    or an explicit `eval_config`.
+    This implements the single public evaluation protocol described in the
+    paper. Earlier metric variants were internal development versions and are
+    not exposed in the release.
 
     Metric families:
       1. Goal completion
-      2. Social safety / human clearance
-      3. Efficiency
-      4. Behavioral alignment to reference human
+      2. Social compatibility / human clearance
+      3. Task efficiency
+      4. Behavioral alignment to the reference human
+
+    Overall scoring uses a behavior-gated aggregation: goal completion, social
+    compatibility, and human-likeness define the base behavior score, while
+    task efficiency enters as a nonlinear gate.
     """
 
     scene_type = _infer_scene_type(scene, task)
-    cfg = _resolve_eval_config(evaluation_version=evaluation_version, eval_config=eval_config)
+    cfg = EVAL_CONFIG
 
     try:
         if task.target is None:
@@ -797,81 +753,5 @@ def evaluate_plan(
         )
 
 
-def evaluate_plan_v1(
-    layout: Layout,
-    scene: Scene,
-    task: Task,
-    robot: Robot,
-    plan: PlanResult,
-    *,
-    scene_json_path: str | Path | None = None,
-) -> EvalResult:
-    return evaluate_plan(
-        layout,
-        scene,
-        task,
-        robot,
-        plan,
-        scene_json_path=scene_json_path,
-        evaluation_version="v1",
-    )
 
 
-def evaluate_plan_v2(
-    layout: Layout,
-    scene: Scene,
-    task: Task,
-    robot: Robot,
-    plan: PlanResult,
-    *,
-    scene_json_path: str | Path | None = None,
-) -> EvalResult:
-    return evaluate_plan(
-        layout,
-        scene,
-        task,
-        robot,
-        plan,
-        scene_json_path=scene_json_path,
-        evaluation_version="v2",
-    )
-
-
-def evaluate_plan_v3(
-    layout: Layout,
-    scene: Scene,
-    task: Task,
-    robot: Robot,
-    plan: PlanResult,
-    *,
-    scene_json_path: str | Path | None = None,
-) -> EvalResult:
-    return evaluate_plan(
-        layout,
-        scene,
-        task,
-        robot,
-        plan,
-        scene_json_path=scene_json_path,
-        evaluation_version="v3",
-    )
-
-
-def evaluate_plan_v4(
-    layout: Layout,
-    scene: Scene,
-    task: Task,
-    robot: Robot,
-    plan: PlanResult,
-    *,
-    scene_json_path: str | Path | None = None,
-) -> EvalResult:
-    return evaluate_plan(
-        layout,
-        scene,
-        task,
-        robot,
-        plan,
-        scene_json_path=scene_json_path,
-        evaluation_version="v4",
-    )
