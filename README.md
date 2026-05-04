@@ -14,9 +14,9 @@ It converts real-world human trajectories into executable navigation tasks, enab
 ### 1. Install
 
 ```bash
-git clone https://github.com/<your-org>/evenflow.git
-cd evenflow
-pip install -e .
+git clone https://github.com/standard-ai/evenflow-benchmark.git
+cd evenflow-benchmark
+pip install .
 ```
 
 ---
@@ -26,7 +26,8 @@ pip install -e .
 ```bash
 huggingface-cli download standard-cognition/EvenFlow \
   --repo-type dataset \
-  --local-dir ./data
+  --local-dir ./data \
+  --local-dir-use-symlinks False
 ```
 
 ---
@@ -35,8 +36,11 @@ huggingface-cli download standard-cognition/EvenFlow \
 
 ```bash
 evenflow render-scene \
+  data/benchmark/aligned_flow/layouts/s2016.layout.simplified.json \
   data/benchmark/aligned_flow/scenes/aligned_flow.af_0001.scene.json \
-  --output outputs/scene.png
+  outputs/scene.png \
+  --show-tracks \
+  --max-tracks 50
 ```
 
 ---
@@ -47,7 +51,7 @@ evenflow render-scene \
 evenflow run-geometry \
   data/benchmark/aligned_flow/tasks/aligned_flow.af_0001.task.json \
   examples/robots/simple_disk.json \
-  --output outputs/plan.json
+  outputs/plan.json
 ```
 
 ---
@@ -55,9 +59,12 @@ evenflow run-geometry \
 ### 5. Evaluate
 
 ```bash
-evenflow evaluate \
-  outputs/plan.json \
-  --task data/benchmark/aligned_flow/tasks/aligned_flow.af_0001.task.json
+evenflow evaluate-plan \
+  data/benchmark/aligned_flow/layouts/s2016.layout.simplified.json \
+  data/benchmark/aligned_flow/scenes/aligned_flow.af_0001.scene.json \
+  data/benchmark/aligned_flow/tasks/aligned_flow.af_0001.task.json \
+  examples/robots/simple_disk.json \
+  outputs/plan.json
 ```
 
 ---
@@ -65,10 +72,13 @@ evenflow evaluate \
 ### 6. Visualize the plan
 
 ```bash
-evenflow render \
+evenflow render-scene-task-plan \
+  data/benchmark/aligned_flow/layouts/s2016.layout.simplified.json \
+  data/benchmark/aligned_flow/scenes/aligned_flow.af_0001.scene.json \
+  data/benchmark/aligned_flow/tasks/aligned_flow.af_0001.task.json \
   outputs/plan.json \
-  --task data/benchmark/aligned_flow/tasks/aligned_flow.af_0001.task.json \
-  --output outputs/render.png
+  outputs/render.png \
+  --show-tracks
 ```
 
 ---
