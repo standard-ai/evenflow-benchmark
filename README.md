@@ -37,7 +37,6 @@ hf download standard-cognition/EvenFlow \
 
 ```bash
 evenflow render-scene \
-  data/benchmark/aligned_flow/layouts/s2016.layout.simplified.json \
   data/benchmark/aligned_flow/scenes/aligned_flow.af_0001.scene.json \
   outputs/scene.png \
   --show-tracks \
@@ -57,12 +56,18 @@ evenflow run-geometry \
 
 ---
 
-### 5. Evaluate
+### 5. Validate the plan
+
+```bash
+evenflow validate-plan outputs/plan.json
+```
+
+---
+
+### 6. Evaluate the plan
 
 ```bash
 evenflow evaluate-plan \
-  data/benchmark/aligned_flow/layouts/s2016.layout.simplified.json \
-  data/benchmark/aligned_flow/scenes/aligned_flow.af_0001.scene.json \
   data/benchmark/aligned_flow/tasks/aligned_flow.af_0001.task.json \
   examples/robots/simple_disk.json \
   outputs/plan.json
@@ -70,12 +75,10 @@ evenflow evaluate-plan \
 
 ---
 
-### 6. Visualize the plan
+### 6. Visualize the result
 
 ```bash
-evenflow render-scene-task-plan \
-  data/benchmark/aligned_flow/layouts/s2016.layout.simplified.json \
-  data/benchmark/aligned_flow/scenes/aligned_flow.af_0001.scene.json \
+evenflow render-plan \
   data/benchmark/aligned_flow/tasks/aligned_flow.af_0001.task.json \
   outputs/plan.json \
   outputs/render.png \
