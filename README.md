@@ -329,7 +329,7 @@ def track_aware_straight_line(task_json, robot_json, plan_json):
     save_plan(plan_json, plan)
 ```
 
-This is a puposeful simple example planner, but it exercises the main
+This is a puposefully simple example planner, but it exercises the main
 data models needed.
 
 Download an executable version of this planner here (you should have EvenFlow 
