@@ -75,7 +75,7 @@ evenflow evaluate-plan \
 
 ---
 
-### 6. Visualize the result
+### 7. Visualize the result
 
 ```bash
 evenflow render-plan \
@@ -86,6 +86,16 @@ evenflow render-plan \
 ```
 
 ---
+
+### ✅ Expected Result
+
+After running the above steps, you should see a rendered plan similar to:
+
+![Rendered plan](assets/render_example.png)
+
+This shows the planner trajectory (orange) over real human movement.
+
+
 
 ## 🧪 Quickstart to Writing a Custom Planner
 
