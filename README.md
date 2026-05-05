@@ -7,6 +7,38 @@ Most benchmarks evaluate whether an agent can navigate *around* people.
 
 It converts real-world human trajectories into executable navigation tasks, enabling trajectory-level evaluation of planner behavior in realistic environments.
 
+**Version:** v1.0 (NeurIPS 2026 release)
+
+---
+
+## 🧠 Core Concepts
+
+- **Task**: Defines a navigation problem (start, goal, timing)
+- **Scene**: Provides human trajectory context over a time window
+- **Layout**: Static environment geometry (walls, obstacles)
+- **Tracks**: Real human motion trajectories within the scene
+
+---
+
+## 📂 Dataset Structure
+
+After downloading the dataset, files are organized as:
+
+```text
+data/benchmark/
+  aligned_flow/
+    tasks/
+    scenes/
+    layouts/
+  cross_flow/
+    tasks/
+    scenes/
+    layouts/
+  interaction_constrained/
+    tasks/
+    scenes/
+    layouts/
+
 ---
 
 ## ⚡ Getting Started in 2 Minutes
@@ -134,6 +166,21 @@ The included geometry baseline intentionally does **not** use human tracks—it 
 
 ---
 
+### 🧭 Track Representations
+
+Human trajectories are provided in two forms:
+
+- **TrackSimple**: (x, y, vx, vy) — canonical representation used for planning  
+- **Full track (pose)**: richer representation including pose keypoints (not required for most planners)
+
+Most planners should use `TrackSimple`, accessed via:
+
+```python
+store = load_track_store(scene, scene_json_path=scene_json)
+tracks = list(store.iter_simple_tracks())
+
+---
+
 ### 🧠 Minimal planner interface
 
 ```python
@@ -170,9 +217,14 @@ Your planner must produce a JSON file with this structure:
 }
 ```
 
-### Key requirement
+### Plan requirements
 
-The trajectory must be **time-parameterized**.
+A valid plan must:
+
+- Be **time-parameterized** (timestamps must be provided)
+- Start at the task start state
+- Reach the goal within the task horizon
+- Provide consistent position and velocity fields
 
 EvenFlow evaluates behavior over time—not just geometric feasibility.
 
@@ -350,6 +402,15 @@ python examples/planners/track_aware_demo.py \
 ## Dataset
 
 👉 https://huggingface.co/datasets/standard-cognition/EvenFlow
+
+---
+
+## ⚠️ Limitations
+
+- Single-environment dataset (v1 release)
+- Offline evaluation (no closed-loop interaction with humans)
+
+We view this release as a foundation for future benchmarks spanning additional environments and interactive evaluation settings.
 
 ---
 
