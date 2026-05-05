@@ -6,6 +6,7 @@ Most benchmarks evaluate whether an agent can navigate *around* people.
 **EvenFlow evaluates whether an agent can navigate *with* them.**
 
 It converts real-world human trajectories into executable navigation tasks, enabling trajectory-level evaluation of planner behavior in realistic environments.
+This enables evaluation of coordination, timing, and interaction—not just collision avoidance.
 
 **Version:** v1.0 (NeurIPS 2026 release)
 
@@ -38,6 +39,7 @@ data/benchmark/
     tasks/
     scenes/
     layouts/
+```
 
 ---
 
@@ -178,6 +180,7 @@ Most planners should use `TrackSimple`, accessed via:
 ```python
 store = load_track_store(scene, scene_json_path=scene_json)
 tracks = list(store.iter_simple_tracks())
+```
 
 ---
 
@@ -260,9 +263,7 @@ evenflow evaluate-plan \
 
 ### 📌 Reference implementation
 
-Below is a simple but  useful example of a track-aware planner that 
-reads the scene’s TrackStore, extracts surrounding TrackSimple tracks, 
-computes a crude local-flow direction, and returns a valid PlanResult.
+Below is a minimal track-aware planner demonstrating how to parse scene trajectories.
 
 ```python
 from pathlib import Path
@@ -401,6 +402,7 @@ python examples/planners/track_aware_demo.py \
 
 ## Dataset
 
+Full dataset, documentation, and download:
 👉 https://huggingface.co/datasets/standard-cognition/EvenFlow
 
 ---
