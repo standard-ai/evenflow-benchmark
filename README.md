@@ -212,7 +212,7 @@ Below is a simple but  useful example of a track-aware planner that
 reads the scene’s TrackStore, extracts surrounding TrackSimple tracks, 
 computes a crude local-flow direction, and returns a valid PlanResult.
 
-```
+```python
 from pathlib import Path
 import time
 
