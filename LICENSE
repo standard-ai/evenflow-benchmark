@@ -1,0 +1,100 @@
+EVENFLOW DATASET LICENSE AGREEMENT
+
+Release Date: September 2026
+
+Summary:
+- Free for research and non-commercial use
+- Commercial use requires a separate license agreement with Standard AI
+- Redistribution allowed with attribution
+- No re-identification permitted
+
+---
+
+1. Definitions
+
+"EvenFlow Dataset" means the dataset, database, or other materials released under this Agreement.
+
+"Dataset Materials" means the EvenFlow Dataset and accompanying documentation (and any portion thereof).
+
+"Derivative Works" means any work that is based on or derived from the Dataset Materials and includes modifications, annotations, or transformations.
+
+"Documentation" means any materials accompanying the EvenFlow Dataset.
+
+"Licensee" or "you" means the individual or entity using the Dataset Materials.
+
+"Standard" means Standard Cognition Corp.
+
+---
+
+2. License Grant
+
+Subject to the terms of this Agreement, Standard grants you a non-exclusive, worldwide, non-transferable, royalty-free license to:
+
+- use the Dataset Materials
+- reproduce and distribute the Dataset Materials
+- create Derivative Works
+- modify the Dataset Materials
+
+---
+
+3. Redistribution and Attribution
+
+If you distribute the Dataset Materials or Derivative Works, you must:
+
+- attribute Standard Cognition as the source
+- include a copy of this license
+- clearly indicate any modifications made
+
+---
+
+4. Acceptable Use
+
+You agree that:
+
+- You will comply with all applicable laws and regulations
+- You will maintain the Dataset Materials in de-identified form
+- You will not attempt to re-identify any individuals represented in the Dataset Materials
+
+---
+
+5. Commercial Use
+
+The Dataset Materials may be used freely for research and non-commercial purposes.
+
+If your use of the Dataset Materials is part of a product or service that generates revenue exceeding $10,000 USD, you must contact Standard to obtain a commercial license.
+
+Until such a license is granted, continued commercial use is not permitted.
+
+---
+
+6. Intellectual Property
+
+Standard retains all rights to the Dataset Materials.
+
+You retain ownership of any Derivative Works you create, subject to the terms of this Agreement.
+
+No trademark rights are granted under this Agreement.
+
+---
+
+7. Disclaimer of Warranty
+
+THE DATASET MATERIALS ARE PROVIDED "AS IS" WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED.
+
+---
+
+8. Limitation of Liability
+
+IN NO EVENT SHALL STANDARD BE LIABLE FOR ANY DAMAGES ARISING FROM USE OF THE DATASET MATERIALS.
+
+---
+
+9. Termination
+
+This Agreement terminates if you violate its terms. Upon termination, you must cease use of the Dataset Materials.
+
+---
+
+10. Governing Law
+
+This Agreement is governed by the laws of the State of California.
