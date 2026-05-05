@@ -405,7 +405,7 @@ python examples/planners/track_aware_demo.py \
 Full dataset, documentation, and download:
 👉 https://huggingface.co/datasets/standard-cognition/EvenFlow
 
-Quick download:
+Quick start:
 ```bash
 pip install huggingface_hub
 
